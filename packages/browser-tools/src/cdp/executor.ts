@@ -311,8 +311,11 @@ export class CommandExecutor {
         returnByValue: false,
       });
 
+      if (!queryResult.ok) {
+        return { ok: false, error: new Error(`Element not found: ${selector}`) };
+      }
       const evalResult = (queryResult.value as { result?: { objectId?: string; subtype?: string } })?.result;
-      if (!queryResult.ok || !evalResult?.objectId || evalResult.subtype === "null") {
+      if (!evalResult?.objectId || evalResult.subtype === "null") {
         return {
           ok: false,
           error: new Error(`Element not found: ${selector}`),

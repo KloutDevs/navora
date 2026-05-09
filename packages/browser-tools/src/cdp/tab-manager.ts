@@ -46,7 +46,7 @@ export class TabManager {
       const tabInfo: TabInfo = {
         tabId,
         targetId: tab.targetId,
-        wsUrl: tab.wsUrl,
+        ...(tab.wsUrl !== undefined ? { wsUrl: tab.wsUrl } : {}),
         url: tab.url ?? "",
         title: tab.title ?? "",
         favIconUrl: tab.favIconUrl !== undefined ? tab.favIconUrl : "",

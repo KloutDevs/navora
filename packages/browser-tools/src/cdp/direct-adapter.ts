@@ -86,9 +86,9 @@ export class DirectCDPAdapter implements BrowserAdapter {
 
     this.tabs.syncTabs(pages.map(t => ({
       targetId: t.id,
-      wsUrl: t.webSocketDebuggerUrl,
       url: t.url,
       title: t.title ?? '',
+      ...(t.webSocketDebuggerUrl !== undefined ? { wsUrl: t.webSocketDebuggerUrl } : {}),
     })));
   }
 
