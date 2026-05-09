@@ -1,0 +1,21 @@
+{
+  "name": "@ai-browser-runtime/mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-browser-runtime/shared": "workspace:*",
+    "@ai-browser-runtime/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

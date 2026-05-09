@@ -1,0 +1,25 @@
+{
+  "name": "@ai-browser-runtime/browser-tools",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "dependencies": {
+    "@ai-browser-runtime/protocol": "workspace:*",
+    "@ai-browser-runtime/shared": "workspace:*",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.4.0",
+    "vitest": "^2.0.0"
+  }
+}

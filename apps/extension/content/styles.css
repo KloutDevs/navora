@@ -1,0 +1,8 @@
+/* Content script styles */
+
+/* ABR ID attributes don't need visible styling - they are data-only */
+/* This file can be extended for debugging or visual indicators */
+
+[data-abr-id] {
+  /* Enable for debugging: outline: 1px dashed rgba(59, 130, 246, 0.5); */
+}

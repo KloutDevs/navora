@@ -1,0 +1,5 @@
+{
+  "name": "com.ai-browser-runtime.nm",
+  "description": "AI Browser Runtime Native Messaging Host",
+  "type": "stdio"
+}

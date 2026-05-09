@@ -1,0 +1,47 @@
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor and OS
+.idea/
+.vscode/
+
+# Runtime state
+*.pid
+*.seed
+*.pid.lock
+
+# Local databases and artifacts
+*.sqlite
+*.sqlite3
+*.db
+tmp/
+temp/
+**/.test-temp/
+
+# TypeScript accidentally emitted next to sources (outDir should be dist/)
+packages/**/src/**/*.js
+packages/**/src/**/*.js.map
+packages/**/src/**/*.d.ts
+packages/**/src/**/*.d.ts.map

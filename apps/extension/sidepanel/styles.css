@@ -1,0 +1,308 @@
+/* Sidebar/Popup UI Styles */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  color: #333;
+  background: #f9fafb;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+/* Popup App */
+.popup-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 400px;
+}
+
+.popup-header {
+  background: #1e40af;
+  color: white;
+  padding: 16px;
+}
+
+.popup-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.tab-nav button {
+  flex: 1;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.tab-nav button:hover {
+  background: #f3f4f6;
+}
+
+.tab-nav button.active {
+  color: #1e40af;
+  border-bottom: 2px solid #1e40af;
+  font-weight: 500;
+}
+
+/* Tab Content */
+.popup-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab-content {
+  padding: 16px;
+}
+
+.tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tab-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.status-badge.connected {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.disconnected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* Toggle Row */
+.toggle-row {
+  margin-bottom: 16px;
+}
+
+.toggle-row label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* Add Domain */
+.add-domain {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.add-domain input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.add-domain button {
+  padding: 8px 16px;
+  background: #1e40af;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.add-domain button:hover {
+  background: #1e3a8a;
+}
+
+/* Domain List */
+.domain-list {
+  list-style: none;
+}
+
+.domain-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.domain-list li button {
+  background: none;
+  border: none;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+/* Activity Log */
+.empty {
+  text-align: center;
+  color: #9ca3af;
+  padding: 24px;
+}
+
+.clear-btn {
+  padding: 4px 8px;
+  background: #f3f4f6;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.clear-btn:hover {
+  background: #e5e7eb;
+}
+
+.log-list {
+  list-style: none;
+}
+
+.log-list li {
+  padding: 8px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 12px;
+}
+
+.log-list li.type-error {
+  background: #fef2f2;
+}
+
+.log-list li.type-permission {
+  background: #fef3c7;
+}
+
+.log-list li .timestamp {
+  color: #9ca3af;
+  margin-right: 8px;
+}
+
+.log-list li .action {
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.log-list li .domain {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+/* HUD Modal */
+.hud-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+
+.hud-dialog {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.hud-dialog h2 {
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.hud-dialog p {
+  margin-bottom: 16px;
+  color: #4b5563;
+}
+
+.hud-details {
+  background: #f3f4f6;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 12px;
+}
+
+.hud-details .key {
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.hud-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.hud-actions button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+}
+
+.hud-actions button.deny {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.hud-actions button.approve {
+  background: #3b82f6;
+  color: white;
+}
+
+.hud-actions button.approve:hover {
+  background: #2563eb;
+}
