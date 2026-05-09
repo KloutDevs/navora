@@ -1,33 +1,36 @@
 {
-  "name": "@navora/daemon",
-  "version": "0.1.0",
+  "name": "navora-daemon",
+  "version": "0.2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "ai-browser-daemon": "./dist/main.js"
+    "navora-daemon": "./dist/main.js"
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsup",
     "test": "vitest run",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@navora/browser-tools": "workspace:*",
-    "@navora/mcp": "workspace:*",
-    "@navora/protocol": "workspace:*",
-    "@navora/shared": "workspace:*",
-    "better-sqlite3": "^11.0.0",
     "ulid": "^2.3.0",
     "ws": "^8.16.0",
     "zod": "^3.22.0"
   },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
   "devDependencies": {
+    "@navora/browser-tools": "workspace:*",
+    "@navora/mcp": "workspace:*",
+    "@navora/protocol": "workspace:*",
+    "@navora/shared": "workspace:*",
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
+    "tsup": "^8.0.0",
     "typescript": "^5.4.0",
     "vitest": "^1.5.0"
   }
