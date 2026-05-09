@@ -17,8 +17,8 @@
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@ai-browser-runtime/browser-tools": "workspace:*",
-    "@ai-browser-runtime/shared": "workspace:*",
+    "@navora/browser-tools": "workspace:*",
+    "@navora/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "ws": "^8.16.0"
   },

@@ -1,13 +1,13 @@
 /**
- * @ai-browser-runtime/daemon - Lifecycle Index
+ * @navora/daemon - Lifecycle Index
  * Daemon entry point, state management, graceful shutdown
  */
 
 import { LockfileManager, createLockfileManager, type LockfileData } from "./lockfile";
 import type { WebSocketHub } from "../transport/websocket";
 import type { StdioTransport } from "../transport/stdio";
-import type { BrowserAdapter } from "@ai-browser-runtime/browser-tools";
-import { isOk } from "@ai-browser-runtime/shared";
+import type { BrowserAdapter } from "@navora/browser-tools";
+import { isOk } from "@navora/shared";
 
 async function dispatchAdapterTool(
   adapter: BrowserAdapter,

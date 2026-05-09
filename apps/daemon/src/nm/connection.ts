@@ -4,8 +4,8 @@
  */
 
 import { EventEmitter } from "events";
-import type { Result } from "@ai-browser-runtime/shared";
-import { ok, err } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
+import { ok, err } from "@navora/shared";
 import { Buffer } from "buffer";
 import { createFrameReader, createFrameWriter, type FrameReader, type FrameWriter } from "./framing";
 

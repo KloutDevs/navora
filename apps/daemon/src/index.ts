@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/daemon - Persistence Layer
+ * @navora/daemon - Persistence Layer
  * SQLite-based persistence for tool calls, connections, permissions, and blob cache
  */
 

@@ -137,8 +137,8 @@ pnpm lint         # Lint all packages
 pnpm typecheck    # Type-check without emitting
 
 # Per-package
-pnpm --filter @ai-browser-runtime/daemon test
-pnpm --filter @ai-browser-runtime/browser-tools test
+pnpm --filter @navora/daemon test
+pnpm --filter @navora/browser-tools test
 
 # Single file
 pnpm vitest run apps/daemon/tests/integration.test.ts
@@ -149,10 +149,10 @@ pnpm vitest run apps/daemon/tests/integration.test.ts
 When making changes, build in dependency order:
 
 ```bash
-pnpm --filter @ai-browser-runtime/browser-tools build
-pnpm --filter @ai-browser-runtime/daemon build
-pnpm --filter @ai-browser-runtime/claude-plugin build
-pnpm --filter @ai-browser-runtime/cursor-plugin build
+pnpm --filter @navora/browser-tools build
+pnpm --filter @navora/daemon build
+pnpm --filter @navora/claude-plugin build
+pnpm --filter @navora/cursor-plugin build
 ```
 
 ---

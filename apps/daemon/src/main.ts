@@ -9,7 +9,7 @@
  */
 
 import { createDaemon } from "./lifecycle/index.js";
-import { DirectCDPAdapter } from "@ai-browser-runtime/browser-tools";
+import { DirectCDPAdapter } from "@navora/browser-tools";
 
 const CDP_PORT = Number(process.env["AI_BROWSER_CDP_PORT"] ?? 9222);
 const DAEMON_PORT = Number(process.env["AI_BROWSER_DAEMON_PORT"] ?? 51432);

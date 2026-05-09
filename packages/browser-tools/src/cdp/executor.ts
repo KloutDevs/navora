@@ -3,7 +3,7 @@
  * This is the core automation layer of the Browser Context Engine.
  */
 
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 import type {
   DevToolsProtocol,
 } from "./client";
@@ -17,7 +17,7 @@ import type {
   CookieInfo,
 } from "../adapter";
 import type { CDPErrorMapper } from "./errors";
-import { ProtocolErrorCode } from "@ai-browser-runtime/protocol";
+import { ProtocolErrorCode } from "@navora/protocol";
 
 export interface CommandExecutorOptions {
   cdp: DevToolsProtocol;

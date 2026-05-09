@@ -3,8 +3,8 @@
  * Implements token bucket algorithm per profile/tool combination
  */
 
-import type { Logger } from "@ai-browser-runtime/shared";
-import { ok, err, type Result, isOk } from "@ai-browser-runtime/shared";
+import type { Logger } from "@navora/shared";
+import { ok, err, type Result, isOk } from "@navora/shared";
 
 export interface RateLimiterConfig {
   /** Maximum requests per window */

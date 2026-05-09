@@ -1,9 +1,9 @@
 /**
- * @ai-browser-runtime/daemon - MCP Stdio Server Transport
+ * @navora/daemon - MCP Stdio Server Transport
  * Implements the stdio transport for MCP server communication
  */
 
-import { MCPServer, MCPServerBuilder, parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type MCPServerOptions, type JSONRPCRequest } from "@ai-browser-runtime/mcp";
+import { MCPServer, MCPServerBuilder, parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type MCPServerOptions, type JSONRPCRequest } from "@navora/mcp";
 
 /**
  * Stdio transport options

@@ -1,4 +1,4 @@
-# @ai-browser-runtime/claude-plugin
+# @navora/claude-plugin
 
 MCP plugin for [Claude Code](https://claude.ai/code) — gives Claude direct control over a Chrome browser via CDP.
 

@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/mcp
+ * @navora/mcp
  * MCP Server Builder - constructs an MCP server with tools and resources.
  *
  * Dependency rules (HARD):
@@ -17,7 +17,7 @@ import {
   ToolRegistry as ToolRegistryImpl,
   ResourceRegistry as ResourceRegistryImpl,
 } from "./types.js";
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 import {
   createJSONRPCSuccessResponse,
   createMethodNotFoundResponse,
@@ -31,9 +31,9 @@ import {
   type JSONRPCRequest,
   type JSONRPCResponse,
 } from "./json-rpc.js";
-import { err, ok } from "@ai-browser-runtime/shared";
-import { generate } from "@ai-browser-runtime/shared";
-import type { Logger } from "@ai-browser-runtime/shared";
+import { err, ok } from "@navora/shared";
+import { generate } from "@navora/shared";
+import type { Logger } from "@navora/shared";
 
 // =============================================================================
 // MCP Server Methods

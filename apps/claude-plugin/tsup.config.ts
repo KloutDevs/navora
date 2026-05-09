@@ -9,7 +9,7 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   noExternal: [
-    '@ai-browser-runtime/browser-tools',
-    '@ai-browser-runtime/shared',
+    '@navora/browser-tools',
+    '@navora/shared',
   ],
 });

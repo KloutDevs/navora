@@ -3,7 +3,7 @@
  */
 
 import { SqlitePersistenceLayer, type PermissionGrantRow } from "../persistence/index";
-import { ok, err, type Result } from "@ai-browser-runtime/shared";
+import { ok, err, type Result } from "@navora/shared";
 import { ulid } from "ulid";
 
 export interface PermissionCheck {

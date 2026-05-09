@@ -13,7 +13,7 @@ import {
   createJSONRPCErrorResponse,
   JSONRPCErrorCode,
 } from "../src/json-rpc";
-import { ok, err } from "@ai-browser-runtime/shared";
+import { ok, err } from "@navora/shared";
 
 describe("MCPServerBuilder", () => {
   let builder: MCPServerBuilder;

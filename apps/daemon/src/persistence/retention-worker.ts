@@ -2,7 +2,7 @@
  * RetentionWorker - Background worker for cleaning up expired blobs
  */
 
-import type { Logger } from "@ai-browser-runtime/shared";
+import type { Logger } from "@navora/shared";
 import { createBlobStore, type BlobStore } from "./blob-store";
 
 export interface RetentionConfig {

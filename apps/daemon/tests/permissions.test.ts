@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, rmdSync } from "fs";
 import { SqlitePersistenceLayer } from "../src/persistence/index";
 import { SqlitePermissionStore, createPermissionStore } from "../src/permissions/permission-store";
 import { ConfirmationGate, createConfirmationGate } from "../src/permissions/confirmation-gate";
-import { createLogger } from "@ai-browser-runtime/shared";
+import { createLogger } from "@navora/shared";
 
 describe("SqlitePermissionStore", () => {
   let dbPath: string;

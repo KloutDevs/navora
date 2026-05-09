@@ -1,11 +1,11 @@
 /**
- * @ai-browser-runtime/daemon - WebSocket Hub
+ * @navora/daemon - WebSocket Hub
  * Implements WebSocket server on 127.0.0.1:51432 with JSON-RPC 2.0 dispatch
  */
 
 import { WebSocketServer, WebSocket } from "ws";
-import { parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type JSONRPCRequest, JSONRPCErrorCode } from "@ai-browser-runtime/mcp";
-import { generate } from "@ai-browser-runtime/shared";
+import { parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type JSONRPCRequest, JSONRPCErrorCode } from "@navora/mcp";
+import { generate } from "@navora/shared";
 
 // =============================================================================
 // Types

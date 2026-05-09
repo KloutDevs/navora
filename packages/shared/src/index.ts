@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/shared
+ * @navora/shared
  * Shared utilities for the AI Browser Runtime ecosystem
  */
 

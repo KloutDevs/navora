@@ -6,9 +6,9 @@
 import { EventEmitter } from "events";
 import { Buffer } from "buffer";
 import { z } from "zod";
-import type { Result } from "@ai-browser-runtime/shared";
-import { ok, err } from "@ai-browser-runtime/shared";
-import { NMMessageSchema, NMEnvelopeSchema, NMAcknowledgmentSchema, type NMEnvelope, type NMMessage } from "@ai-browser-runtime/protocol";
+import type { Result } from "@navora/shared";
+import { ok, err } from "@navora/shared";
+import { NMMessageSchema, NMEnvelopeSchema, NMAcknowledgmentSchema, type NMEnvelope, type NMMessage } from "@navora/protocol";
 import { createNMConnection, type NMConnection, type NMConnectionConfig } from "./connection";
 import { createNMMultiplexer, type NMMultiplexer, type MultiplexerConfig } from "./multiplexer";
 import { createMessageChunker, type MessageChunker } from "./chunking";

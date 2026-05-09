@@ -3,7 +3,7 @@
  * Handles connection lifecycle, reconnection, and target discovery.
  */
 
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 import { DevToolsProtocol } from "./client";
 
 export interface TargetInfo {

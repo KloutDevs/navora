@@ -15,7 +15,7 @@ import type {
   NetworkRequest,
   CookieInfo,
 } from "./adapter";
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 
 export interface FakeAdapterOptions {
   /** Simulate tab count (default: 2) */

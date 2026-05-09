@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/browser-tools
+ * @navora/browser-tools
  * Browser automation tools — BrowserAdapter interface, CDP client, FakeAdapter.
  *
  * Dependency rules (HARD):

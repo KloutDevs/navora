@@ -5,8 +5,8 @@
 
 import { Buffer } from "buffer";
 import type { Readable, Writable } from "stream";
-import type { Result } from "@ai-browser-runtime/shared";
-import { ok, err } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
+import { ok, err } from "@navora/shared";
 
 /**
  * Maximum message size (1MB as per Chrome native messaging spec)

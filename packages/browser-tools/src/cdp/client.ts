@@ -4,7 +4,7 @@
  */
 
 import { WebSocket } from "ws";
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 
 export interface CDPCommand {
   id: number;

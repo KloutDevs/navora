@@ -2,7 +2,7 @@
  * ConfirmationGate - Handles HUD round-trip permission confirmations with timeout
  */
 
-import { ok, err, type Result } from "@ai-browser-runtime/shared";
+import { ok, err, type Result } from "@navora/shared";
 
 export interface PendingConfirmation {
   id: string;

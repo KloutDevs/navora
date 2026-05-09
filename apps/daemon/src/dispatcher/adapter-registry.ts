@@ -3,9 +3,9 @@
  * Provides routing and lifecycle management for browser adapters
  */
 
-import type { BrowserAdapter, BrowserAdapterEventListener } from "@ai-browser-runtime/browser-tools";
-import type { Logger } from "@ai-browser-runtime/shared";
-import { ok, err, isOk, isError, type Result } from "@ai-browser-runtime/shared";
+import type { BrowserAdapter, BrowserAdapterEventListener } from "@navora/browser-tools";
+import type { Logger } from "@navora/shared";
+import { ok, err, isOk, isError, type Result } from "@navora/shared";
 
 export interface AdapterRegistryConfig {
   /** Default timeout for adapter operations (ms) */

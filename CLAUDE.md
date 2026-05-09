@@ -11,17 +11,17 @@ pnpm lint           # Lint all packages
 pnpm typecheck      # Type-check all packages without emitting
 
 # Per-package commands
-pnpm --filter @ai-browser-runtime/daemon test
-pnpm --filter @ai-browser-runtime/browser-tools test
+pnpm --filter @navora/daemon test
+pnpm --filter @navora/browser-tools test
 
 # Single test file
 pnpm vitest run apps/daemon/tests/integration.test.ts
 
 # Extension build (WXT)
-pnpm --filter @ai-browser-runtime/extension build
+pnpm --filter @navora/extension build
 
 # Claude Code plugin
-pnpm --filter @ai-browser-runtime/claude-plugin build
+pnpm --filter @navora/claude-plugin build
 ```
 
 ## Architecture
@@ -45,11 +45,11 @@ apps/daemon  ←→  WebSocket :51432  ←→  apps/daemon/src/nm-shim  (one pro
 
 ### Apps
 
-**`apps/claude-plugin`** — Claude Code MCP plugin (`@ai-browser-runtime/claude-plugin`).
+**`apps/claude-plugin`** — Claude Code MCP plugin (`@navora/claude-plugin`).
 - Exposes 13 browser tools via MCP stdio to Claude Code.
 - Auto-detects and launches Chrome on CDP port 9222 if not running.
 - Connects to Chrome directly via CDP (no daemon required).
-- Install: `claude mcp add ai-browser npx @ai-browser-runtime/claude-plugin`
+- Install: `claude mcp add ai-browser npx @navora/claude-plugin`
 - `src/index.ts` — MCP server + tool registry. `src/browser.ts` — CDP session wrapper. `src/chrome-launcher.ts` — Chrome auto-launch.
 
 **`apps/daemon`** — Node.js long-running process (ESM).
@@ -70,15 +70,15 @@ apps/daemon  ←→  WebSocket :51432  ←→  apps/daemon/src/nm-shim  (one pro
 
 | Package | Role |
 |---|---|
-| `@ai-browser-runtime/protocol` | Wire types: `NMMessage`, `NMEnvelope`, `WSMessage`, `WSEnvelope`, `ProtocolError` |
-| `@ai-browser-runtime/shared` | Core utilities: `Result<T,E>`, `Logger`, `ulid`, `redact` |
-| `@ai-browser-runtime/browser-tools` | `BrowserAdapter` interface + CDP implementation (`packages/browser-tools/src/cdp/`) |
-| `@ai-browser-runtime/mcp` | `MCPServerBuilder` / `MCPServer` — JSON-RPC 2.0 over stdio |
-| `@ai-browser-runtime/ui` | UI components |
+| `@navora/protocol` | Wire types: `NMMessage`, `NMEnvelope`, `WSMessage`, `WSEnvelope`, `ProtocolError` |
+| `@navora/shared` | Core utilities: `Result<T,E>`, `Logger`, `ulid`, `redact` |
+| `@navora/browser-tools` | `BrowserAdapter` interface + CDP implementation (`packages/browser-tools/src/cdp/`) |
+| `@navora/mcp` | `MCPServerBuilder` / `MCPServer` — JSON-RPC 2.0 over stdio |
+| `@navora/ui` | UI components |
 
 ### Key patterns
 
-**`Result<T, E>`** — All async operations return `Result<T, E>` (never throw). Always use `isOk()` / `isError()` guards from `@ai-browser-runtime/shared` before accessing `.value` or `.error`.
+**`Result<T, E>`** — All async operations return `Result<T, E>` (never throw). Always use `isOk()` / `isError()` guards from `@navora/shared` before accessing `.value` or `.error`.
 
 **`BrowserAdapter`** — The single integration point between the daemon and the browser. All tool execution goes through this interface (`packages/browser-tools/src/adapter.ts`). The daemon never imports Chrome APIs. `FakeAdapter` (`fake-adapter.ts`) is used in tests.
 

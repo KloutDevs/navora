@@ -1,13 +1,13 @@
 /**
- * @ai-browser-runtime/mcp
+ * @navora/mcp
  * JSON-RPC 2.0 request/response handling for MCP protocol.
  *
  * Dependency rules (HARD):
  * - mcp → protocol, shared (never reverse)
  */
 
-import type { Result } from "@ai-browser-runtime/shared";
-import { err, ok } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
+import { err, ok } from "@navora/shared";
 
 // =============================================================================
 // JSON-RPC Types

@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/mcp",
+  "name": "@navora/mcp",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@ai-browser-runtime/shared": "workspace:*",
-    "@ai-browser-runtime/protocol": "workspace:*"
+    "@navora/shared": "workspace:*",
+    "@navora/protocol": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

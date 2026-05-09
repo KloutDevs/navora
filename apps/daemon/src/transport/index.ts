@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/daemon - Transport Layer
+ * @navora/daemon - Transport Layer
  * Stdio and WebSocket transport implementations
  */
 

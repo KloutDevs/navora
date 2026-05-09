@@ -6,7 +6,7 @@ import {
   type ResourceContent,
   type ToolExecutionContext,
 } from "../src/types";
-import { ok } from "@ai-browser-runtime/shared";
+import { ok } from "@navora/shared";
 
 describe("ResourceRegistry", () => {
   let registry: ResourceRegistry;

@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/mcp
+ * @navora/mcp
  * MCP (Model Context Protocol) server implementation.
  *
  * Provides:

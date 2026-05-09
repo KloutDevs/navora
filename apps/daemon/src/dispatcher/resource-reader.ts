@@ -3,8 +3,8 @@
  * Provides access to tool calls, connections, permissions, and blobs
  */
 
-import type { Logger } from "@ai-browser-runtime/shared";
-import { ok, err, isOk, isError, type Result } from "@ai-browser-runtime/shared";
+import type { Logger } from "@navora/shared";
+import { ok, err, isOk, isError, type Result } from "@navora/shared";
 import type { SqlitePersistenceLayer, ToolCallRow } from "../persistence/index";
 import type { SqlitePermissionStore, ListedPermission } from "../permissions/permission-store";
 

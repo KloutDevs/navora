@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/daemon",
+  "name": "@navora/daemon",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,10 +15,10 @@
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@ai-browser-runtime/browser-tools": "workspace:*",
-    "@ai-browser-runtime/mcp": "workspace:*",
-    "@ai-browser-runtime/protocol": "workspace:*",
-    "@ai-browser-runtime/shared": "workspace:*",
+    "@navora/browser-tools": "workspace:*",
+    "@navora/mcp": "workspace:*",
+    "@navora/protocol": "workspace:*",
+    "@navora/shared": "workspace:*",
     "better-sqlite3": "^11.0.0",
     "ulid": "^2.3.0",
     "ws": "^8.16.0",

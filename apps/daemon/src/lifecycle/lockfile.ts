@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/daemon - Lockfile Management
+ * @navora/daemon - Lockfile Management
  * Single-instance enforcement via PID file
  */
 

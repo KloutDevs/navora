@@ -4,7 +4,7 @@
  * This interface is the single integration point between the daemon and the browser.
  */
 
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 
 /** Tab information as tracked by the Browser Context Engine */
 export interface TabInfo {

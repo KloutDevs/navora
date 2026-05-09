@@ -6,8 +6,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "path";
 import { unlinkSync, existsSync, mkdirSync, rmdSync } from "fs";
 import { SqlitePersistenceLayer } from "../src/persistence/index";
-import type { Logger } from "@ai-browser-runtime/shared";
-import { createLogger } from "@ai-browser-runtime/shared";
+import type { Logger } from "@navora/shared";
+import { createLogger } from "@navora/shared";
 
 describe("SqlitePersistenceLayer", () => {
   let dbPath: string;

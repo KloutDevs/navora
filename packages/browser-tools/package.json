@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/browser-tools",
+  "name": "@navora/browser-tools",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,8 +12,8 @@
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
-    "@ai-browser-runtime/protocol": "workspace:*",
-    "@ai-browser-runtime/shared": "workspace:*",
+    "@navora/protocol": "workspace:*",
+    "@navora/shared": "workspace:*",
     "ws": "^8.17.0"
   },
   "devDependencies": {

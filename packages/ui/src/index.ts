@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/ui
+ * @navora/ui
  * React UI components for the AI Browser Runtime ecosystem
  */
 

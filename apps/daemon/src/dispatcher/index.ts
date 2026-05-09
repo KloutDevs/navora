@@ -1,5 +1,5 @@
 /**
- * @ai-browser-runtime/daemon - Dispatcher
+ * @navora/daemon - Dispatcher
  * Request pipeline, rate limiting, adapter registry, and resource readers
  */
 

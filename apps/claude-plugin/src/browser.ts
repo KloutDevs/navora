@@ -10,7 +10,7 @@ import type {
   ScriptResult,
   ConsoleEntry,
   TabInfo,
-} from '@ai-browser-runtime/browser-tools';
+} from '@navora/browser-tools';
 
 async function call<T>(tool: string, params: Record<string, unknown> = {}): Promise<T> {
   return daemonClient.call(tool, params) as Promise<T>;

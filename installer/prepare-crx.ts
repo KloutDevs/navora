@@ -64,7 +64,7 @@ function buildExtension(): void {
 
   try {
     // Run WXT build
-    execSync("pnpm --filter @ai-browser-runtime/extension build", {
+    execSync("pnpm --filter @navora/extension build", {
       cwd: PROJECT_ROOT,
       stdio: "inherit",
     });

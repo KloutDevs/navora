@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/extension",
+  "name": "@navora/extension",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,8 +13,8 @@
     "postinstall": "wxt prepare"
   },
   "dependencies": {
-    "@ai-browser-runtime/protocol": "workspace:*",
-    "@ai-browser-runtime/shared": "workspace:*",
+    "@navora/protocol": "workspace:*",
+    "@navora/shared": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zustand": "^4.5.0"

@@ -3,9 +3,9 @@
  * validate → permissionCheck → rateLimit → adapterRoute → captureBlobs → redact → persist → respond
  */
 
-import type { BrowserAdapter, ToolResult, TabInfo, DomResult, ScriptResult, ConsoleEntry } from "@ai-browser-runtime/browser-tools";
-import type { Logger } from "@ai-browser-runtime/shared";
-import { ok, err, isOk, isError, type Result } from "@ai-browser-runtime/shared";
+import type { BrowserAdapter, ToolResult, TabInfo, DomResult, ScriptResult, ConsoleEntry } from "@navora/browser-tools";
+import type { Logger } from "@navora/shared";
+import { ok, err, isOk, isError, type Result } from "@navora/shared";
 import { type SqlitePersistenceLayer } from "../persistence/index";
 import type { SqlitePermissionStore, PermissionCheck } from "../permissions/permission-store";
 import { RateLimiter, type RateLimitResult } from "./rate-limiter";

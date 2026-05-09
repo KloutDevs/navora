@@ -1,12 +1,12 @@
 /**
- * @ai-browser-runtime/mcp
+ * @navora/mcp
  * MCP (Model Context Protocol) types for tool and resource registration.
  *
  * Dependency rules (HARD):
  * - mcp → protocol, shared (never reverse)
  */
 
-import type { Result } from "@ai-browser-runtime/shared";
+import type { Result } from "@navora/shared";
 
 // =============================================================================
 // Tool Types
