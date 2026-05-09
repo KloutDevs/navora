@@ -50,7 +50,7 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainers via the [GitHub security advisory page](https://github.com/KloutDevs/navora/security/advisories/new).
+reported to the maintainers at **kloutdevs@gmail.com**.
 All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution
