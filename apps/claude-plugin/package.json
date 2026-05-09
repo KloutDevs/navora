@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/claude-plugin",
+  "name": "navora-claude-plugin",
   "version": "0.1.0",
   "description": "Claude Code MCP plugin for AI Browser Runtime — control Chrome from Claude",
   "type": "module",

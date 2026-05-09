@@ -17,10 +17,10 @@ Navora bridges tool-calling AI clients (Claude, Cursor, and any MCP-compatible h
 claude mcp add ai-browser node /path/to/navora/apps/claude-plugin/dist/index.js
 ```
 
-Or with npx once published:
+Or with npx:
 
 ```bash
-claude mcp add ai-browser npx @ai-browser-runtime/claude-plugin
+claude mcp add ai-browser npx navora-claude-plugin
 ```
 
 ### Cursor

@@ -1,5 +1,5 @@
 {
-  "name": "@ai-browser-runtime/cursor-plugin",
+  "name": "navora-cursor-plugin",
   "version": "0.1.0",
   "description": "Cursor MCP plugin for AI Browser Runtime — control Chrome/Brave from Cursor",
   "type": "module",

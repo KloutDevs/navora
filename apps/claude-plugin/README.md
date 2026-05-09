@@ -8,10 +8,10 @@ MCP plugin for [Claude Code](https://claude.ai/code) — gives Claude direct con
 claude mcp add ai-browser node /path/to/navora/apps/claude-plugin/dist/index.js
 ```
 
-Once published to npm:
+Or with npx:
 
 ```bash
-claude mcp add ai-browser npx @ai-browser-runtime/claude-plugin
+claude mcp add ai-browser npx navora-claude-plugin
 ```
 
 ## How it works
