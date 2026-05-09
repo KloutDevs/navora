@@ -14,7 +14,7 @@ Instead, report privately with:
 - Reproduction steps or proof of concept.
 - Potential impact and affected components.
 
-Temporary contact method: open a private security advisory on GitHub for this repository.
-If that is not available yet, open an issue with minimal detail and request private follow-up.
+Open a [private security advisory](https://github.com/KloutDevs/navora/security/advisories/new) on GitHub.
+If that option is unavailable, open an issue with minimal detail and request private follow-up.
 
 We will acknowledge reports as soon as possible and coordinate disclosure timing.
