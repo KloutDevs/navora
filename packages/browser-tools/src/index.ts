@@ -60,3 +60,16 @@ export { FakeAdapter, type FakeAdapterOptions } from "./fake-adapter";
 
 // DirectCDPAdapter — BrowserAdapter backed by direct CDP connections
 export { DirectCDPAdapter, type DirectCDPAdapterOptions } from "./cdp/direct-adapter";
+
+// Native Messaging adapter + NM contracts
+export type {
+  NMMethod,
+  NMParamMap,
+  NMResultMap,
+  NMHandlerMap,
+} from "./nm/nm-types";
+export {
+  NMAdapter,
+  type NativeMessagingBridge,
+  type NMAdapterOptions,
+} from "./nm/nm-adapter";

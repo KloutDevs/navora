@@ -1,11 +1,28 @@
 /**
  * @navora/daemon - WebSocket Hub
- * Implements WebSocket server on 127.0.0.1:51432 with JSON-RPC 2.0 dispatch
+ * Implements WebSocket server on 127.0.0.1:51520 with JSON-RPC 2.0 dispatch
  */
 
+import { createHmac } from "node:crypto";
+import { EventEmitter } from "events";
+import type { IncomingMessage } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import { parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type JSONRPCRequest, JSONRPCErrorCode } from "@navora/mcp";
 import { generate } from "@navora/shared";
+
+export interface ShimConnectedPayload {
+  profileId: string;
+  socket: WebSocket;
+  clientId: string;
+  client: WsClient;
+}
+
+function extractBearer(raw: string | string[] | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (!v?.startsWith("Bearer ")) return undefined;
+  return v.slice(7).trim();
+}
 
 // =============================================================================
 // Types
@@ -19,6 +36,8 @@ export interface WsClient {
   profileId?: string;
   connectedAt: number;
   authenticated: boolean;
+  /** Present after auth — Bearer upgrade from NM shim, or JSON-RPC auth/login */
+  authMethod?: "header" | "login";
 }
 
 /** Token validation result */
@@ -51,7 +70,7 @@ export interface WebSocketHubOptions {
 /**
  * WebSocketHub - Manages WebSocket client connections with token auth and JSON-RPC dispatch
  */
-export class WebSocketHub {
+export class WebSocketHub extends EventEmitter {
   private wss: WebSocketServer | null = null;
   private port: number;
   private host: string;
@@ -65,6 +84,7 @@ export class WebSocketHub {
   private handlers: Map<string, (request: JSONRPCRequest, client: WsClient) => Promise<string>> = new Map();
 
   constructor(options: WebSocketHubOptions) {
+    super();
     this.port = options.port;
     this.host = options.host ?? "127.0.0.1";
     this.maxMessageSize = options.maxMessageSize ?? 1024 * 1024; // 1MB default
@@ -123,13 +143,10 @@ export class WebSocketHub {
     };
   }
 
-  /**
-   * Simple token hashing (placeholder - use proper HMAC in production)
-   */
   private hashToken(profileId: string, timestamp: number): string {
-    // This is a simplified hash for demonstration
-    // In production, use crypto.createHmac with the authSecret
-    return `${profileId}:${timestamp}`.split("").reverse().join("");
+    return createHmac("sha256", this.authSecret!)
+      .update(`${profileId}:${timestamp}`)
+      .digest("hex");
   }
 
   /**
@@ -147,7 +164,10 @@ export class WebSocketHub {
     });
 
     this.wss.on("listening", () => {
-      this.log(`WebSocketHub listening on ${this.host}:${this.port}`);
+      const la = this.wss?.address();
+      const p =
+        typeof la === "object" && la !== null ? la.port : this.port;
+      this.log(`WebSocketHub listening on ${this.host}:${p}`);
     });
 
     this.wss.on("connection", (socket, req) => {
@@ -155,14 +175,56 @@ export class WebSocketHub {
     });
 
     this.wss.on("error", (error) => {
-      this.log(`WebSocket server error: ${error.message}`);
+      // Always log server errors — these are fatal (e.g. EADDRINUSE)
+      console.error(`[WebSocketHub] Server error: ${error.message}`);
+      this.emit("error", error);
     });
   }
 
   /**
    * Handle a new WebSocket connection
    */
-  private handleConnection(socket: WebSocket, _req: unknown): void {
+  private handleConnection(socket: WebSocket, req?: IncomingMessage): void {
+    const bearer = extractBearer(req?.headers?.authorization ?? req?.headers?.["authorization"]);
+
+    if (bearer) {
+      let closedEarly = false;
+      socket.once("close", () => {
+        closedEarly = true;
+      });
+
+      void this.validateToken(bearer).then((validation) => {
+        if (closedEarly) return;
+        if (!validation.valid) {
+          socket.close(1008, (validation.error ?? "invalid token").slice(0, 120));
+          return;
+        }
+
+        const clientId = generate();
+        const client: WsClient = {
+          clientId,
+          token: bearer,
+          socket,
+          profileId: validation.profileId,
+          connectedAt: Date.now(),
+          authenticated: true,
+          authMethod: "header",
+        };
+
+        this.clients.set(clientId, client);
+        this.log(`Client ${clientId} authenticated via Bearer for profile ${validation.profileId}`);
+        this.wireSocket(socket, clientId, client);
+        const shimPayload: ShimConnectedPayload = {
+          profileId: validation.profileId,
+          socket,
+          clientId,
+          client,
+        };
+        this.emit("shim-connected", shimPayload);
+      });
+      return;
+    }
+
     const clientId = generate();
     const client: WsClient = {
       clientId,
@@ -173,12 +235,15 @@ export class WebSocketHub {
     };
 
     this.clients.set(clientId, client);
+    this.wireSocket(socket, clientId, client);
+  }
+
+  private wireSocket(socket: WebSocket, clientId: string, client: WsClient): void {
     this.log(`Client connected: ${clientId}`);
 
-    // Set up message handler
     socket.on("message", async (data) => {
       try {
-        const message = data.toString();
+        const message = Buffer.isBuffer(data) ? data.toString("utf8") : data.toString();
         await this.handleClientMessage(client, message);
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -187,13 +252,11 @@ export class WebSocketHub {
       }
     });
 
-    // Set up close handler
     socket.on("close", () => {
       this.clients.delete(clientId);
       this.log(`Client disconnected: ${clientId}`);
     });
 
-    // Set up error handler
     socket.on("error", (error) => {
       this.log(`Client ${clientId} socket error: ${error.message}`);
       this.clients.delete(clientId);
@@ -264,6 +327,7 @@ export class WebSocketHub {
     client.token = token;
     client.profileId = validation.profileId;
     client.authenticated = true;
+    client.authMethod = "login";
 
     this.log(`Client ${client.clientId} authenticated for profile ${client.profileId}`);
 
@@ -484,19 +548,50 @@ export class WebSocketHub {
     });
 
     this.wss = null;
+    this.removeAllListeners();
   }
 
   /**
    * Get the server address
    */
+  /**
+   * Resolves after the underlying HTTP server is listening (needed when `port: 0`).
+   */
+  whenListening(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.wss) {
+        reject(new Error("WebSocketHub not started"));
+        return;
+      }
+      if (this.wss.address() !== null) {
+        resolve();
+        return;
+      }
+      this.wss.once("listening", () => resolve());
+      this.wss.once("error", reject);
+    });
+  }
+
   getAddress(): { host: string; port: number } | null {
     if (!this.wss) {
       return null;
     }
-    return {
-      host: this.host,
-      port: this.port,
-    };
+    const la = this.wss.address();
+    if (la !== null && typeof la === "object") {
+      /** Loopback to connect from tests/clients when the server binds all interfaces */
+      const connectHost =
+        la.family === "IPv6" && la.address === "::"
+          ? "::1"
+          : la.address === "0.0.0.0"
+            ? "127.0.0.1"
+            : la.address;
+      return { host: connectHost, port: la.port };
+    }
+    if (typeof la === "string") {
+      return { host: this.host, port: this.port };
+    }
+    /* Listening callback not fired yet */
+    return { host: this.host, port: this.port };
   }
 
   /**
@@ -514,4 +609,16 @@ export class WebSocketHub {
  */
 export function createWebSocketHub(options: WebSocketHubOptions): WebSocketHub {
   return new WebSocketHub(options);
+}
+
+/**
+ * Generate a signed token for NM shim → daemon authentication.
+ * Format: base64(profileId:timestamp:hmac-sha256)
+ */
+export function generateToken(profileId: string, authSecret: string): string {
+  const timestamp = Date.now();
+  const signature = createHmac("sha256", authSecret)
+    .update(`${profileId}:${timestamp}`)
+    .digest("hex");
+  return Buffer.from(`${profileId}:${timestamp}:${signature}`).toString("base64");
 }

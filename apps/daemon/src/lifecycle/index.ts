@@ -4,102 +4,133 @@
  */
 
 import { LockfileManager, createLockfileManager, type LockfileData } from "./lockfile";
-import type { WebSocketHub } from "../transport/websocket";
+import type { WebSocketHub, ShimConnectedPayload } from "../transport/websocket";
 import type { StdioTransport } from "../transport/stdio";
 import type { BrowserAdapter } from "@navora/browser-tools";
+import { NMAdapter } from "@navora/browser-tools";
 import { isOk } from "@navora/shared";
+import type { AdapterRegistry } from "../dispatcher/adapter-registry";
+import type { ChromeExtensionAdapter } from "../nm/adapter";
+import { ExtensionNotConnectedError, CdpNotAvailableError } from "../dispatcher/adapter-errors";
+import { resolveAdapterRegistryKey, PERSISTENCE_ONLY_TOOLS } from "../dispatcher/pipeline";
+import { cdpEvaluate, cdpNetworkHar, cdpSendCommand } from "../dispatcher/cdp-direct-tools";
 
 async function dispatchAdapterTool(
-  adapter: BrowserAdapter,
+  adapter: BrowserAdapter | undefined,
   tool: string,
   params: Record<string, unknown>,
-  tabId?: number
+  tabId: number | undefined,
+  cdpPort: number
 ): Promise<unknown> {
+  const skipAdapter = tool.startsWith("cdp_") || PERSISTENCE_ONLY_TOOLS.has(tool);
+
+  if (!skipAdapter && !adapter) {
+    throw new Error("No browser adapter for this tool");
+  }
+
   switch (tool) {
-    case "get_tabs": {
-      const r = await adapter.getTabs();
+    case "browser_get_tabs": {
+      const r = await adapter!.getTabs();
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "get_active_tab": {
-      const r = await adapter.getActiveTab();
+    case "browser_get_active_tab": {
+      const r = await adapter!.getActiveTab();
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "navigate": {
+    case "browser_navigate": {
       const url = params["url"] as string;
       if (!url) throw new Error("Missing url");
-      const r = await adapter.navigate(url, tabId);
+      const r = await adapter!.navigate(url, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "go_back": {
-      const r = await adapter.goBack(tabId);
+    case "browser_go_back": {
+      const r = await adapter!.goBack(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "reload": {
-      const r = await adapter.reload(tabId);
+    case "browser_reload": {
+      const r = await adapter!.reload(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "get_dom": {
-      const r = await adapter.extractDom(tabId);
+    case "browser_get_dom": {
+      const r = await adapter!.extractDom(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "get_text": {
-      const r = await adapter.extractText(tabId);
+    case "browser_get_text": {
+      const r = await adapter!.extractText(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "click": {
+    case "browser_click": {
       const selector = params["selector"] as string;
       if (!selector) throw new Error("Missing selector");
-      const r = await adapter.clickElement(selector, tabId);
+      const r = await adapter!.clickElement(selector, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "type": {
+    case "browser_type": {
       const text = params["text"] as string;
       if (!text) throw new Error("Missing text");
       const selector = params["selector"] as string | undefined;
-      const r = await adapter.typeText(text, selector, tabId);
+      const r = await adapter!.typeText(text, selector, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "scroll": {
+    case "browser_scroll": {
       const deltaY = params["deltaY"] as number | undefined;
       const selector = params["selector"] as string | undefined;
-      const r = await adapter.scroll(selector, deltaY, tabId);
+      const r = await adapter!.scroll(selector, deltaY, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "wait_for": {
+    case "browser_wait_for": {
       const selector = params["selector"] as string;
       if (!selector) throw new Error("Missing selector");
       const timeout = params["timeout"] as number | undefined;
-      const r = await adapter.waitForSelector(selector, timeout, tabId);
+      const r = await adapter!.waitForSelector(selector, timeout, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "screenshot": {
-      const r = await adapter.takeScreenshot(tabId);
+    case "browser_screenshot": {
+      const r = await adapter!.takeScreenshot(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "get_console": {
-      const r = await adapter.getConsoleLogs(tabId);
+    case "browser_get_console": {
+      const r = await adapter!.getConsoleLogs(tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
-    case "execute_script": {
+    case "browser_execute_script": {
       const source = params["source"] as string;
       if (!source) throw new Error("Missing source");
-      const r = await adapter.executeScript(source, tabId);
+      const r = await adapter!.executeScript(source, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }
+
+    case "cdp_evaluate": {
+      const expression = params["expression"] as string;
+      if (!expression) throw new Error("Missing expression");
+      return cdpEvaluate(expression, cdpPort);
+    }
+
+    case "cdp_send_command": {
+      const method = params["method"] as string;
+      if (!method) throw new Error("Missing method");
+      const cdpParams = params["params"] as Record<string, unknown> | undefined;
+      return cdpSendCommand(method, cdpParams, cdpPort);
+    }
+
+    case "cdp_network_har": {
+      return cdpNetworkHar(cdpPort);
+    }
+
     default:
       throw new Error(`Unknown tool: ${tool}`);
   }
@@ -107,7 +138,7 @@ async function dispatchAdapterTool(
 
 /** Daemon configuration */
 export interface DaemonConfig {
-  /** WebSocket port (default: 51432) */
+  /** WebSocket port (default: 51520) */
   wsPort?: number;
   /** WebSocket host (default: 127.0.0.1) */
   wsHost?: string;
@@ -122,8 +153,12 @@ export interface DaemonConfig {
   authSecret?: string;
   /** Enable debug logging */
   debug?: boolean;
-  /** Browser adapter for direct-CDP mode (bypasses full Dispatcher) */
-  cdpAdapter?: BrowserAdapter;
+  /** Adapter registry (`nm:*`, `cdp:*` keys) — required for WebSocket tools/call */
+  adapterRegistry?: AdapterRegistry;
+  /** Shared Chrome NM bridge — receives shim WebSocket payloads */
+  extensionAdapter?: ChromeExtensionAdapter;
+  /** CDP port for routing `cdp_*` tools (default NAVORA_CDP_PORT / 9222) */
+  cdpPort?: number;
 }
 
 /** Daemon application state */
@@ -167,7 +202,7 @@ export async function createDaemon(config: DaemonConfig = {}): Promise<DaemonIns
   const state: DaemonState = {
     startedAt: Date.now(),
     lockData,
-    wsPort: config.wsPort ?? 51432,
+    wsPort: config.wsPort ?? 51520,
     wsHost: config.wsHost ?? "127.0.0.1",
     stdioEnabled: config.enableStdio ?? true,
   };
@@ -206,16 +241,47 @@ export async function createDaemon(config: DaemonConfig = {}): Promise<DaemonIns
           });
         });
 
-        if (config.cdpAdapter) {
-          const adapter = config.cdpAdapter;
-          wsHub.registerHandler("tools/call", async (request) => {
+        const cdpPort = config.cdpPort ?? Number(process.env["NAVORA_CDP_PORT"] ?? 9222);
+
+        if (config.adapterRegistry) {
+          const registry = config.adapterRegistry;
+
+          wsHub.registerHandler("tools/call", async (request, client) => {
             const params = (request.params ?? {}) as Record<string, unknown>;
             const tool = params["tool"] as string;
             const toolParams = (params["params"] as Record<string, unknown>) ?? {};
             const tabId = typeof toolParams["tabId"] === "number" ? toolParams["tabId"] : undefined;
+            const profileId = client.profileId ?? "default";
+
+            const skipAdapter = tool.startsWith("cdp_") || PERSISTENCE_ONLY_TOOLS.has(tool);
+
+            let adapter: BrowserAdapter | undefined;
+            if (!skipAdapter) {
+              const kr = resolveAdapterRegistryKey(tool, profileId, cdpPort);
+              if (!isOk(kr)) {
+                return JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: request.id,
+                  error: { code: -32602, message: kr.error.message },
+                });
+              }
+
+              const ar = registry.get(kr.value);
+              if (!isOk(ar)) {
+                const msg = kr.value.startsWith("nm:")
+                  ? new ExtensionNotConnectedError(profileId).message
+                  : new CdpNotAvailableError(cdpPort).message;
+                return JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: request.id,
+                  result: { success: false, error: msg },
+                });
+              }
+              adapter = ar.value;
+            }
 
             try {
-              const data = await dispatchAdapterTool(adapter, tool, toolParams, tabId);
+              const data = await dispatchAdapterTool(adapter, tool, toolParams, tabId, cdpPort);
               return JSON.stringify({ jsonrpc: "2.0", id: request.id, result: { success: true, data } });
             } catch (e) {
               const msg = e instanceof Error ? e.message : String(e);
@@ -227,17 +293,36 @@ export async function createDaemon(config: DaemonConfig = {}): Promise<DaemonIns
             return JSON.stringify({
               jsonrpc: "2.0",
               id: request.id,
-              error: { code: -32603, message: "No CDP adapter configured" },
+              error: { code: -32603, message: "No adapter registry configured" },
             });
           });
         }
 
-        // Initialize CDP adapter if provided
-        if (config.cdpAdapter) {
-          const initResult = await config.cdpAdapter.initialize();
-          if (!isOk(initResult)) {
-            console.warn(`CDP adapter init warning: ${initResult.error.message}`);
-          }
+        if (config.extensionAdapter && config.adapterRegistry) {
+          const ext = config.extensionAdapter;
+          const registry = config.adapterRegistry;
+
+          wsHub.on("shim-connected", (payload: ShimConnectedPayload) => {
+            const { profileId, socket } = payload;
+            ext.attachWebSocketBridge(profileId, socket);
+
+            void (async () => {
+              const nm = new NMAdapter(ext, profileId);
+              const initResult = await nm.initialize();
+              if (!isOk(initResult)) {
+                console.warn(`[daemon] NM adapter init failed for ${profileId}: ${initResult.error.message}`);
+                return;
+              }
+              const reg = registry.register(`nm:${profileId}`, nm);
+              if (!isOk(reg)) {
+                console.warn(`[daemon] register nm:${profileId}: ${reg.error.message}`);
+              }
+            })();
+
+            socket.once("close", () => {
+              void registry.unregister(`nm:${profileId}`);
+            });
+          });
         }
 
         wsHub.start();

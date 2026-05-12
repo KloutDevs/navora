@@ -1,5 +1,5 @@
 {
-  "name": "navora",
+  "name": "@navora/ai-browser-runtime",
   "version": "0.1.0",
   "private": true,
   "description": "Navora - browser automation runtime for AI agents",
@@ -8,11 +8,13 @@
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
+    "test:coverage": "vitest run --coverage --workspace ./vitest.workspace.ts",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "clean": "turbo run clean && turbo prune"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^2.0.0",
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
@@ -20,7 +22,7 @@
     "eslint": "^8.57.0",
     "turbo": "^2.0.0",
     "typescript": "^5.4.0",
-    "vitest": "^1.5.0"
+    "vitest": "^2.0.0"
   },
   "engines": {
     "node": ">=20.0.0",

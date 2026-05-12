@@ -3,12 +3,13 @@
  * Handles auth/login handshake and routes tool calls via JSON-RPC 2.0.
  */
 
+import { createHmac } from 'node:crypto';
 import { WebSocket } from 'ws';
 
-const DAEMON_PORT = Number(process.env['AI_BROWSER_DAEMON_PORT'] ?? 51432);
-const DAEMON_HOST = process.env['AI_BROWSER_DAEMON_HOST'] ?? '127.0.0.1';
-const AUTH_SECRET = process.env['AI_BROWSER_AUTH_SECRET'] ?? 'dev-secret-change-in-production';
-const PROFILE_ID = process.env['AI_BROWSER_PROFILE_ID'] ?? 'default';
+const DAEMON_PORT = Number(process.env['NAVORA_DAEMON_PORT'] ?? 51520);
+const DAEMON_HOST = process.env['NAVORA_DAEMON_HOST'] ?? '127.0.0.1';
+const AUTH_SECRET = process.env['NAVORA_AUTH_SECRET'] ?? 'dev-secret-change-in-production';
+const PROFILE_ID = process.env['NAVORA_PROFILE_ID'] ?? 'default';
 
 interface JsonRpcResponse {
   jsonrpc: '2.0';
@@ -19,7 +20,9 @@ interface JsonRpcResponse {
 
 function generateToken(profileId: string): string {
   const timestamp = Date.now();
-  const signature = `${profileId}:${timestamp}`.split('').reverse().join('');
+  const signature = createHmac('sha256', AUTH_SECRET)
+    .update(`${profileId}:${timestamp}`)
+    .digest('hex');
   return Buffer.from(`${profileId}:${timestamp}:${signature}`).toString('base64');
 }
 

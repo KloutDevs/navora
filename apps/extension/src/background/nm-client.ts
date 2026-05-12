@@ -1,16 +1,33 @@
-import type { ConnectionStatus, NMRequest, NMResponse } from '../shared/types';
+import type { NMEnvelope } from "@navora/protocol";
+import { NMEnvelopeSchema } from "@navora/protocol";
+import { dispatchDaemonNmMessage } from "./index";
 
-const NM_HOST = 'com.ai-browser-runtime.nm';
+function newRequestId(): string {
+  return crypto.randomUUID?.() ?? `req_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+const NM_HOST = "com.ai-browser-runtime.nm";
 const REQUEST_TIMEOUT_MS = 8000;
 const RECONNECT_DELAY_MS = 5000;
 
 type StatusCallback = (status: ConnectionStatus) => void;
 
+export interface ConnectionStatus {
+  connected: boolean;
+  daemonVersion?: string;
+  lastConnected?: number;
+  error?: string;
+}
+
 class NMClientImpl {
   private port: chrome.runtime.Port | null = null;
   private pendingRequests = new Map<
     string,
-    { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+    {
+      resolve: (v: unknown) => void;
+      reject: (e: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   private statusListeners: StatusCallback[] = [];
   private _status: ConnectionStatus = { connected: false };
@@ -33,38 +50,56 @@ class NMClientImpl {
     this.connecting = true;
     try {
       this.port = chrome.runtime.connectNative(NM_HOST);
-      this.port.onMessage.addListener((msg: NMResponse) => this.onMessage(msg));
+      this.port.onMessage.addListener((msg: unknown) => this.onMessage(msg));
       this.port.onDisconnect.addListener(() => this.onDisconnect());
       this.connecting = false;
-      this.updateStatus({ connected: true, daemonVersion: '0.1.0', lastConnected: Date.now() });
+      this.updateStatus({ connected: true, daemonVersion: "0.1.0", lastConnected: Date.now() });
     } catch (err) {
       this.connecting = false;
       this.updateStatus({
         connected: false,
-        error: err instanceof Error ? err.message : 'Connect failed',
+        error: err instanceof Error ? err.message : "Connect failed",
       });
     }
   }
 
-  private onMessage(msg: NMResponse): void {
-    const pending = this.pendingRequests.get(msg.id);
-    if (!pending) return;
-    clearTimeout(pending.timer);
-    this.pendingRequests.delete(msg.id);
-    if (msg.success) {
-      pending.resolve(msg.result);
-    } else {
-      pending.reject(new Error(msg.error?.message ?? 'Request failed'));
+  private onMessage(msg: unknown): void {
+    const parsed = NMEnvelopeSchema.safeParse(msg);
+    if (!parsed.success) {
+      return;
+    }
+
+    const env = parsed.data;
+
+    if (env.kind === "response" || env.kind === "error") {
+      const rid = env.kind === "response" ? env.request_id : env.request_id ?? "";
+      const pending = this.pendingRequests.get(rid);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingRequests.delete(rid);
+        if (env.kind === "error") {
+          pending.reject(new Error(env.message));
+        } else if (env.success) {
+          pending.resolve(env.result);
+        } else {
+          pending.reject(new Error(env.error?.message ?? "Request failed"));
+        }
+      }
+      return;
+    }
+
+    if (env.kind === "request" && this.port) {
+      void dispatchDaemonNmMessage(this.port, env);
     }
   }
 
   private onDisconnect(): void {
-    const errorMsg = chrome.runtime.lastError?.message ?? 'Disconnected';
+    const errorMsg = chrome.runtime.lastError?.message ?? "Disconnected";
     this.port = null;
     this.connecting = false;
     for (const [, p] of this.pendingRequests) {
       clearTimeout(p.timer);
-      p.reject(new Error('NM disconnected'));
+      p.reject(new Error("NM disconnected"));
     }
     this.pendingRequests.clear();
     this.updateStatus({ connected: false, error: errorMsg });
@@ -77,19 +112,30 @@ class NMClientImpl {
     for (const cb of this.statusListeners) cb(status);
   }
 
+  /**
+   * Extension-initiated tool call (legacy content/EXECUTE_TOOL path).
+   */
   async executeTool(method: string, params?: Record<string, unknown>): Promise<unknown> {
     if (!this.port || !this._status.connected) {
-      throw new Error('Not connected to daemon');
+      throw new Error("Not connected to daemon");
     }
-    const id = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const request: NMRequest = { id, method, params };
+
+    const requestId = newRequestId();
+    const envelope: NMEnvelope = {
+      kind: "request",
+      request_id: requestId,
+      method,
+      params,
+    };
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pendingRequests.delete(id);
+        this.pendingRequests.delete(requestId);
         reject(new Error(`Request timeout: ${method}`));
       }, REQUEST_TIMEOUT_MS);
-      this.pendingRequests.set(id, { resolve, reject, timer });
-      this.port!.postMessage(request);
+
+      this.pendingRequests.set(requestId, { resolve, reject, timer });
+      this.port!.postMessage(envelope);
     });
   }
 
@@ -99,7 +145,11 @@ class NMClientImpl {
       this.reconnectTimer = null;
     }
     if (this.port) {
-      try { this.port.disconnect(); } catch { /* ignore */ }
+      try {
+        this.port.disconnect();
+      } catch {
+        /* ignore */
+      }
       this.port = null;
     }
     this.updateStatus({ connected: false });

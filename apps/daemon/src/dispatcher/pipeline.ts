@@ -11,6 +11,31 @@ import type { SqlitePermissionStore, PermissionCheck } from "../permissions/perm
 import { RateLimiter, type RateLimitResult } from "./rate-limiter";
 import { AdapterRegistry } from "./adapter-registry";
 import type { BlobKind } from "../persistence/blob-store";
+import { ExtensionNotConnectedError, CdpNotAvailableError } from "./adapter-errors";
+import { cdpEvaluate, cdpNetworkHar, cdpSendCommand } from "./cdp-direct-tools";
+
+/**
+ * Tools that bypass adapter routing entirely (no browser connection needed).
+ * Shared with lifecycle.ts to keep the skip-list in one place.
+ */
+export const PERSISTENCE_ONLY_TOOLS = new Set([
+  "get_tool_calls",
+  "clear_tool_calls",
+  "confirm_hud",
+  "cancel_hud",
+]);
+
+/** Resolve registry storage key for routing (NM extension vs CDP). */
+export function resolveAdapterRegistryKey(
+  toolName: string,
+  profileId: string,
+  cdpPort: number
+): Result<string, Error> {
+  if (toolName.startsWith("cdp_")) {
+    return ok(`cdp:${cdpPort}`);
+  }
+  return ok(`nm:${profileId}`);
+}
 
 export interface DispatcherConfig {
   /** Persistence layer */
@@ -23,6 +48,8 @@ export interface DispatcherConfig {
   adapterRegistry: AdapterRegistry;
   /** Default timeout for operations */
   defaultTimeoutMs?: number;
+  /** Chrome CDP port for `cdp_*` tools (default env NAVORA_CDP_PORT or 9222) */
+  cdpPort?: number;
   /** Logger */
   logger?: Logger;
 }
@@ -57,6 +84,7 @@ export class Dispatcher {
   private rateLimiter: RateLimiter;
   private adapterRegistry: AdapterRegistry;
   private defaultTimeoutMs: number;
+  private cdpPort: number;
   private logger: Logger;
 
   constructor(config: DispatcherConfig) {
@@ -65,6 +93,7 @@ export class Dispatcher {
     this.rateLimiter = config.rateLimiter;
     this.adapterRegistry = config.adapterRegistry;
     this.defaultTimeoutMs = config.defaultTimeoutMs ?? 30_000;
+    this.cdpPort = config.cdpPort ?? Number(process.env["NAVORA_CDP_PORT"] ?? 9222);
     this.logger = config.logger ?? this.createDefaultLogger();
   }
 
@@ -166,13 +195,28 @@ export class Dispatcher {
       return this.createRateLimitedResponse(id, toolName, startTime, rateLimitResult.value);
     }
 
-    // Step 4: Route to adapter
-    const adapterResult = this.adapterRegistry.get(profileId);
-    if (isError(adapterResult)) {
-      return this.createErrorResponse(id, toolName, startTime, adapterResult.error.message, "ADAPTER_ERROR");
-    }
+    const skipAdapter = PERSISTENCE_ONLY_TOOLS.has(toolName);
 
-    const adapter = adapterResult.value;
+    let adapter: BrowserAdapter | undefined;
+
+    if (!skipAdapter) {
+      const keyResult = resolveAdapterRegistryKey(toolName, profileId, this.cdpPort);
+      if (isError(keyResult)) {
+        return this.createErrorResponse(id, toolName, startTime, keyResult.error.message, "VALIDATION_ERROR");
+      }
+
+      const adapterResult = this.adapterRegistry.get(keyResult.value);
+      if (isError(adapterResult)) {
+        let msg = adapterResult.error.message;
+        if (keyResult.value.startsWith("nm:")) {
+          msg = new ExtensionNotConnectedError(profileId).message;
+        } else if (keyResult.value.startsWith("cdp:")) {
+          msg = new CdpNotAvailableError(this.cdpPort).message;
+        }
+        return this.createErrorResponse(id, toolName, startTime, msg, "ADAPTER_ERROR");
+      }
+      adapter = adapterResult.value;
+    }
 
     // Step 5-7: Execute tool, capture blobs, redact
     let toolResult: ToolResult;
@@ -223,10 +267,10 @@ export class Dispatcher {
   }
 
   /**
-   * Execute a tool using the browser adapter
+   * Execute a tool using the browser adapter (optional for persistence-only / CDP-direct tools).
    */
   private async executeTool(
-    adapter: BrowserAdapter,
+    adapter: BrowserAdapter | undefined,
     toolName: string,
     params: Record<string, unknown>,
     profileId: string
@@ -234,7 +278,8 @@ export class Dispatcher {
     const tabId = params["tabId"] as number | undefined;
 
     switch (toolName) {
-      case "navigate": {
+      case "browser_navigate": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const url = params["url"] as string;
         if (!url) {
           throw new Error("Missing required param: url");
@@ -246,7 +291,8 @@ export class Dispatcher {
         return result.value;
       }
 
-      case "get_tabs": {
+      case "browser_get_tabs": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const result = await adapter.getTabs();
         if (isError(result)) {
           throw result.error;
@@ -254,7 +300,8 @@ export class Dispatcher {
         return { success: true, data: result.value, durationMs: 0, tabId: 0 };
       }
 
-      case "get_active_tab": {
+      case "browser_get_active_tab": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const result = await adapter.getActiveTab();
         if (isError(result)) {
           throw result.error;
@@ -262,7 +309,8 @@ export class Dispatcher {
         return { success: true, data: result.value, durationMs: 0, tabId: result.value.tabId };
       }
 
-      case "click_element": {
+      case "browser_click": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const selector = params["selector"] as string;
         if (!selector) {
           throw new Error("Missing required param: selector");
@@ -274,7 +322,8 @@ export class Dispatcher {
         return result.value;
       }
 
-      case "type_text": {
+      case "browser_type": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const text = params["text"] as string;
         if (!text) {
           throw new Error("Missing required param: text");
@@ -287,7 +336,8 @@ export class Dispatcher {
         return result.value;
       }
 
-      case "get_dom": {
+      case "browser_get_dom": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const result = await adapter.extractDom(tabId);
         if (isError(result)) {
           throw result.error;
@@ -295,7 +345,17 @@ export class Dispatcher {
         return { success: true, data: result.value, durationMs: 0, tabId: tabId ?? 0 };
       }
 
-      case "execute_script": {
+      case "browser_get_text": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
+        const result = await adapter.extractText(tabId);
+        if (isError(result)) {
+          throw result.error;
+        }
+        return { success: true, data: result.value, durationMs: 0, tabId: tabId ?? 0 };
+      }
+
+      case "browser_execute_script": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const source = params["source"] as string;
         if (!source) {
           throw new Error("Missing required param: source");
@@ -307,7 +367,8 @@ export class Dispatcher {
         return { success: true, data: result.value, durationMs: 0, tabId: tabId ?? 0 };
       }
 
-      case "get_console": {
+      case "browser_get_console": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const result = await adapter.getConsoleLogs(tabId);
         if (isError(result)) {
           throw result.error;
@@ -315,16 +376,58 @@ export class Dispatcher {
         return { success: true, data: result.value, durationMs: 0, tabId: tabId ?? 0 };
       }
 
-      case "get_screenshot": {
+      case "browser_screenshot": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const result = await adapter.takeScreenshot(tabId);
         if (isError(result)) {
           throw result.error;
         }
-        // Screenshot is already base64 encoded
         return { success: true, data: result.value, durationMs: 0, tabId: tabId ?? 0 };
       }
 
+      case "browser_scroll": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
+        const deltaY = params["deltaY"] as number | undefined;
+        const selector = params["selector"] as string | undefined;
+        const result = await adapter.scroll(selector, deltaY, tabId);
+        if (isError(result)) {
+          throw result.error;
+        }
+        return result.value;
+      }
+
+      case "browser_wait_for": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
+        const selector = params["selector"] as string;
+        if (!selector) throw new Error("Missing required param: selector");
+        const timeout = params["timeout"] as number | undefined;
+        const result = await adapter.waitForSelector(selector, timeout, tabId);
+        if (isError(result)) {
+          throw result.error;
+        }
+        return result.value;
+      }
+
+      case "browser_go_back": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
+        const result = await adapter.goBack(tabId);
+        if (isError(result)) {
+          throw result.error;
+        }
+        return result.value;
+      }
+
+      case "browser_reload": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
+        const result = await adapter.reload(tabId);
+        if (isError(result)) {
+          throw result.error;
+        }
+        return result.value;
+      }
+
       case "inject_overlay": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         // Custom tool: inject a visual overlay
         const overlayHtml = params["html"] as string;
         const script = `
@@ -344,6 +447,7 @@ export class Dispatcher {
       }
 
       case "remove_overlay": {
+        if (!adapter) throw new ExtensionNotConnectedError(profileId);
         const script = `
           (function() {
             const div = document.getElementById('abr-overlay');
@@ -381,6 +485,26 @@ export class Dispatcher {
         return { success: true, data: { cleared: true }, durationMs: 0, tabId: 0 };
       }
 
+      case "cdp_evaluate": {
+        const expression = params["expression"] as string;
+        if (!expression) throw new Error("Missing required param: expression");
+        const data = await cdpEvaluate(expression, this.cdpPort);
+        return { success: true, data, durationMs: 0, tabId: tabId ?? 0 };
+      }
+
+      case "cdp_send_command": {
+        const method = params["method"] as string;
+        if (!method) throw new Error("Missing required param: method");
+        const cdpParams = params["params"] as Record<string, unknown> | undefined;
+        const data = await cdpSendCommand(method, cdpParams, this.cdpPort);
+        return { success: true, data, durationMs: 0, tabId: tabId ?? 0 };
+      }
+
+      case "cdp_network_har": {
+        const data = await cdpNetworkHar(this.cdpPort);
+        return { success: true, data, durationMs: 0, tabId: tabId ?? 0 };
+      }
+
       default:
         throw new Error(`Unhandled tool: ${toolName}`);
     }
@@ -408,9 +532,9 @@ export class Dispatcher {
       if (dataStr.length > 10_000) {
         // Determine blob kind based on tool
         let blobKind: BlobKind = "dom_snapshot";
-        if (toolName === "get_screenshot") {
+        if (toolName === "browser_screenshot") {
           blobKind = "screenshot";
-        } else if (toolName === "get_console") {
+        } else if (toolName === "browser_get_console") {
           blobKind = "console_logs";
         }
         
@@ -442,7 +566,7 @@ export class Dispatcher {
       scope,
       permission_decision: permissionDecision,
       permission_grant_id: grantId,
-      status: toolResult.success ? "completed" : "failed",
+      status: toolResult.success ? "success" : "error",
       error_code: toolResult.errorCode?.toString() ?? null,
       duration_ms: toolResult.durationMs,
       result_blob_id: blobId,
@@ -515,21 +639,29 @@ export class Dispatcher {
 
   private getKnownTools(): string[] {
     return [
-      "navigate",
-      "get_tabs",
-      "get_active_tab",
-      "click_element",
-      "type_text",
-      "get_dom",
-      "execute_script",
-      "get_console",
-      "get_screenshot",
+      "browser_navigate",
+      "browser_get_tabs",
+      "browser_get_active_tab",
+      "browser_click",
+      "browser_type",
+      "browser_get_dom",
+      "browser_get_text",
+      "browser_execute_script",
+      "browser_get_console",
+      "browser_screenshot",
+      "browser_scroll",
+      "browser_wait_for",
+      "browser_go_back",
+      "browser_reload",
       "inject_overlay",
       "remove_overlay",
       "confirm_hud",
       "cancel_hud",
       "get_tool_calls",
       "clear_tool_calls",
+      "cdp_evaluate",
+      "cdp_send_command",
+      "cdp_network_har",
     ];
   }
 }

@@ -3,8 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import WebSocket from "ws";
+import { tmpdir } from "node:os";
 import { StdioTransport, createStdioTransport } from "../src/transport/stdio";
-import { WebSocketHub, createWebSocketHub, type WsClient } from "../src/transport/websocket";
+import { WebSocketHub, createWebSocketHub, generateToken, type WsClient } from "../src/transport/websocket";
 import { LockfileManager } from "../src/lifecycle/lockfile";
 import { EventEmitter } from "events";
 
@@ -79,14 +81,14 @@ describe("WebSocketHub", () => {
     expect(hub.getClientCount()).toBe(0);
   });
 
-  it("should start and get address", () => {
+  it("should start and get address", async () => {
     hub.start();
+    await hub.whenListening();
 
     const address = hub.getAddress();
     expect(address).not.toBeNull();
     expect(address!.host).toBe("127.0.0.1");
-    // Port should be > 0 if we got an address, or could be 0 if still starting
-    expect(address!.port).toBeGreaterThanOrEqual(0);
+    expect(address!.port).toBeGreaterThan(0);
   });
 
   it("should return zero clients initially", () => {
@@ -118,6 +120,96 @@ describe("WebSocketHub", () => {
   it("should handle duplicate start gracefully", () => {
     hub.start();
     hub.start();
+    hub.stop();
+  });
+});
+
+describe("WebSocketHub Bearer Authorization header", () => {
+  it("closes with 1008 when Bearer token is invalid", async () => {
+    const hub = createWebSocketHub({
+      port: 0,
+      validateToken: async (token) =>
+        token === "good-secret"
+          ? { valid: true, profileId: "prof-a" }
+          : { valid: false, profileId: "", error: "invalid token" },
+    });
+
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress();
+    expect(addr).not.toBeNull();
+
+    const ws = new WebSocket(`ws://${addr!.host}:${addr!.port}`, {
+      headers: { Authorization: "Bearer bad-secret" },
+    });
+
+    const code = await new Promise<number>((resolve, reject) => {
+      ws.on("close", (c) => resolve(c));
+      ws.on("error", reject);
+    });
+
+    expect(code).toBe(1008);
+    hub.stop();
+  });
+
+  it("authenticates via Bearer and emits shim-connected", async () => {
+    const hub = createWebSocketHub({
+      port: 0,
+      validateToken: async (token) =>
+        token === "good-secret"
+          ? { valid: true, profileId: "prof-a" }
+          : { valid: false, profileId: "", error: "invalid token" },
+    });
+
+    let payload: unknown;
+    hub.once("shim-connected", (p) => {
+      payload = p;
+    });
+
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress();
+    expect(addr).not.toBeNull();
+
+    const ws = new WebSocket(`ws://${addr!.host}:${addr!.port}`, {
+      headers: { Authorization: "Bearer good-secret" },
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+
+    await new Promise((r) => setTimeout(r, 80));
+    expect(payload).toBeDefined();
+    expect((payload as { profileId?: string }).profileId).toBe("prof-a");
+
+    ws.close();
+    hub.stop();
+  });
+
+  it("without Authorization header keeps legacy JSON-RPC auth/login flow", async () => {
+    const hub = createWebSocketHub({
+      port: 0,
+      validateToken: async (token) =>
+        token === "good-secret"
+          ? { valid: true, profileId: "prof-a" }
+          : { valid: false, profileId: "", error: "invalid token" },
+    });
+
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress();
+    expect(addr).not.toBeNull();
+
+    const ws = new WebSocket(`ws://${addr!.host}:${addr!.port}`);
+    await new Promise<void>((resolve, reject) => {
+      ws.once("open", resolve);
+      ws.once("error", reject);
+    });
+
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    ws.close();
     hub.stop();
   });
 });
@@ -233,6 +325,31 @@ describe("LockfileManager", () => {
 
     const data = await manager.read();
     expect(data).toBeNull();
+  });
+
+  it("should overwrite stale lockfile with dead PID (regression: tasklist exit-0 bug)", async () => {
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { join: pathJoin } = await import("node:path");
+    const dir = await mkdtemp(pathJoin(tmpdir(), "navora-stale-"));
+    try {
+      // Write a lockfile with a PID that is almost certainly not running
+      const deadPid = 9_999_997;
+      await writeFile(
+        pathJoin(dir, "daemon.pid"),
+        JSON.stringify({ pid: deadPid, hostname: "test", timestamp: Date.now(), cwd: dir })
+      );
+
+      const manager = new LockfileManager({ lockDir: dir, lockFilename: "daemon.pid" });
+      const result = await manager.acquire();
+
+      // Must succeed — stale lockfile should be cleaned up regardless of platform
+      expect(result).not.toBeNull();
+      expect(result!.pid).toBe(process.pid);
+
+      await manager.release();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("should handle release when not acquired", async () => {
@@ -356,5 +473,127 @@ describe("StdioTransport with mock streams", () => {
     expect(responseData).toBeDefined();
 
     transport.stop();
+  });
+});
+
+// =============================================================================
+// generateToken + HMAC validator
+// =============================================================================
+
+describe("generateToken", () => {
+  const SECRET = "test-hmac-secret";
+  const PROFILE = "test-profile";
+
+  it("produces a base64 string", () => {
+    const token = generateToken(PROFILE, SECRET);
+    expect(() => Buffer.from(token, "base64")).not.toThrow();
+    expect(token.length).toBeGreaterThan(10);
+  });
+
+  it("encodes profileId, timestamp, and 64-char hex signature", () => {
+    const token = generateToken(PROFILE, SECRET);
+    const decoded = Buffer.from(token, "base64").toString("utf8");
+    const parts = decoded.split(":");
+    expect(parts.length).toBe(3);
+    expect(parts[0]).toBe(PROFILE);
+    expect(Number(parts[1])).toBeGreaterThan(0);
+    expect(parts[2]).toHaveLength(64); // sha256 hex
+  });
+
+  it("two tokens for the same profile differ (timestamp changes)", async () => {
+    const t1 = generateToken(PROFILE, SECRET);
+    await new Promise((r) => setTimeout(r, 2));
+    const t2 = generateToken(PROFILE, SECRET);
+    expect(t1).not.toBe(t2);
+  });
+
+  it("validates against WebSocketHub with matching authSecret", async () => {
+    const hub = createWebSocketHub({ port: 0, authSecret: SECRET });
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress()!;
+
+    const token = generateToken(PROFILE, SECRET);
+    const ws = new WebSocket(`ws://${addr.host}:${addr.port}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const opened = await new Promise<boolean>((resolve) => {
+      ws.once("open", () => resolve(true));
+      ws.once("close", () => resolve(false));
+      ws.once("error", () => resolve(false));
+    });
+
+    ws.close();
+    hub.stop();
+    expect(opened).toBe(true);
+  });
+
+  it("rejects a token signed with a different secret", async () => {
+    const hub = createWebSocketHub({ port: 0, authSecret: SECRET });
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress()!;
+
+    const token = generateToken(PROFILE, "wrong-secret");
+    const ws = new WebSocket(`ws://${addr.host}:${addr.port}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const code = await new Promise<number>((resolve) => {
+      ws.once("close", (c) => resolve(c));
+      ws.once("error", () => resolve(-1));
+    });
+
+    hub.stop();
+    expect(code).toBe(1008);
+  });
+
+  it("rejects a token with an expired timestamp", async () => {
+    const hub = createWebSocketHub({ port: 0, authSecret: SECRET });
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress()!;
+
+    // Build a token with a timestamp 25 hours in the past
+    const { createHmac } = await import("node:crypto");
+    const timestamp = Date.now() - 25 * 60 * 60 * 1000;
+    const sig = createHmac("sha256", SECRET).update(`${PROFILE}:${timestamp}`).digest("hex");
+    const token = Buffer.from(`${PROFILE}:${timestamp}:${sig}`).toString("base64");
+
+    const ws = new WebSocket(`ws://${addr.host}:${addr.port}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const code = await new Promise<number>((resolve) => {
+      ws.once("close", (c) => resolve(c));
+      ws.once("error", () => resolve(-1));
+    });
+
+    hub.stop();
+    expect(code).toBe(1008);
+  });
+
+  it("rejects a token with the old reversed-string signature (regression)", async () => {
+    const hub = createWebSocketHub({ port: 0, authSecret: SECRET });
+    hub.start();
+    await hub.whenListening();
+    const addr = hub.getAddress()!;
+
+    const timestamp = Date.now();
+    const oldSig = `${PROFILE}:${timestamp}`.split("").reverse().join("");
+    const token = Buffer.from(`${PROFILE}:${timestamp}:${oldSig}`).toString("base64");
+
+    const ws = new WebSocket(`ws://${addr.host}:${addr.port}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const code = await new Promise<number>((resolve) => {
+      ws.once("close", (c) => resolve(c));
+      ws.once("error", () => resolve(-1));
+    });
+
+    hub.stop();
+    expect(code).toBe(1008);
   });
 });

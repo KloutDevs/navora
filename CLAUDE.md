@@ -34,7 +34,7 @@ This is a **pnpm + Turborepo monorepo** (`apps/*`, `packages/*`). The project is
 AI Client (MCP)
    │ stdio (JSON-RPC 2.0)
    ▼
-apps/daemon  ←→  WebSocket :51432  ←→  apps/daemon/src/nm-shim  (one process per Chrome profile)
+apps/daemon  ←→  WebSocket :51520  ←→  apps/daemon/src/nm-shim  (one process per Chrome profile)
                                                │ stdio (Native Messaging framing)
                                                ▼
                                      apps/extension (Chrome MV3)
@@ -54,9 +54,9 @@ apps/daemon  ←→  WebSocket :51432  ←→  apps/daemon/src/nm-shim  (one pro
 
 **`apps/daemon`** — Node.js long-running process (ESM).
 - `lifecycle/` — Startup, lockfile (single-instance guarantee).
-- `transport/` — WebSocket hub (`ws`, default port `51432`) and stdio MCP transport.
+- `transport/` — WebSocket hub (`ws`, default port `51520`) and stdio MCP transport.
 - `nm/` — Native Messaging bridge: framing (4-byte LE length prefix), `NMConnection`, `NMMultiplexer` (routes by profile ID).
-- `nm-shim/` — Separate binary that Chrome launches as the NM host. Bridges Chrome extension (stdio) ↔ daemon (WebSocket). Spawns the daemon if not running. Reads `AI_BROWSER_RUNTIME_TOKEN`, `AI_BROWSER_RUNTIME_HOST`, `AI_BROWSER_RUNTIME_PORT`.
+- `nm-shim/` — Separate binary that Chrome launches as the NM host. Bridges Chrome extension (stdio) ↔ daemon (WebSocket). Spawns the daemon if not running. Reads `NAVORA_RUNTIME_TOKEN`, `NAVORA_RUNTIME_HOST`, `NAVORA_RUNTIME_PORT`.
 - `dispatcher/` — Core request pipeline: `validate → permissionCheck → rateLimit → adapterRoute → captureBlobs → redact → persist → respond` (`pipeline.ts`).
 - `persistence/` — SQLite via `better-sqlite3`: tool calls, connections, permissions, blob store (large payloads >10 KB land here by kind: `screenshot`, `dom_snapshot`, `console_logs`).
 - `permissions/` — `SqlitePermissionStore` + `ConfirmationGate`.
@@ -92,10 +92,10 @@ apps/daemon  ←→  WebSocket :51432  ←→  apps/daemon/src/nm-shim  (one pro
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AI_BROWSER_RUNTIME_TOKEN` | — | Required WebSocket auth token for shim → daemon |
-| `AI_BROWSER_RUNTIME_HOST` | `127.0.0.1` | Daemon host |
-| `AI_BROWSER_RUNTIME_PORT` | `51432` | Daemon WebSocket port |
-| CDP debug port | `9222` | Chrome remote debugging |
+| `NAVORA_RUNTIME_TOKEN` | — | Required WebSocket auth token for shim → daemon |
+| `NAVORA_RUNTIME_HOST` | `127.0.0.1` | Daemon host |
+| `NAVORA_RUNTIME_PORT` | `51520` | Daemon WebSocket port |
+| `NAVORA_CDP_PORT` | `9222` | Chrome remote debugging |
 
 ### Testing
 

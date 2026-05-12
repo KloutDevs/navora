@@ -14,13 +14,13 @@ Navora bridges tool-calling AI clients (Claude, Cursor, and any MCP-compatible h
 ### Claude Code
 
 ```bash
-claude mcp add ai-browser node /path/to/navora/apps/claude-plugin/dist/index.js
+claude mcp add navora node /path/to/navora/apps/claude-plugin/dist/index.js
 ```
 
 Or with npx:
 
 ```bash
-claude mcp add ai-browser npx navora-claude-plugin
+claude mcp add navora npx navora-claude-plugin
 ```
 
 ### Cursor
@@ -30,7 +30,7 @@ Add to your MCP config (`~/.cursor/mcp.json` or workspace `.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "ai-browser": {
+    "navora": {
       "command": "node",
       "args": ["/path/to/navora/apps/cursor-plugin/dist/index.js"]
     }
@@ -85,7 +85,7 @@ AI Client (MCP)
   ▼
 apps/claude-plugin  ──── or ────  apps/cursor-plugin
   │ startup: ensures Chrome + daemon are running
-  │ WebSocket :51432 (JSON-RPC 2.0)
+  │ WebSocket :51520 (JSON-RPC 2.0)
   ▼
 apps/daemon  (WebSocket hub, auth, routing)
   │
@@ -159,15 +159,28 @@ pnpm --filter @navora/cursor-plugin build
 
 ## Environment variables
 
+### Daemon and Claude plugin
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AI_BROWSER_CDP_PORT` | `9222` | Chrome remote debugging port |
-| `AI_BROWSER_DAEMON_PORT` | `51432` | Daemon WebSocket port |
-| `AI_BROWSER_DAEMON_HOST` | `127.0.0.1` | Daemon host |
-| `AI_BROWSER_AUTH_SECRET` | `dev-secret-change-in-production` | Token signing secret |
-| `AI_BROWSER_DAEMON_BINARY` | auto-detected | Path to `apps/daemon/dist/main.js` |
-| `AI_BROWSER_PROFILE_ID` | `default` | Profile ID for multi-profile routing |
-| `AI_BROWSER_DEBUG` | — | Set to `1` to enable daemon debug logging |
+| `NAVORA_CDP_PORT` | `9222` | Chrome remote debugging port (plugin probes `9222`–`9224` unless overridden) |
+| `NAVORA_DAEMON_PORT` | `51520` | Daemon WebSocket port |
+| `NAVORA_DAEMON_HOST` | `127.0.0.1` | Daemon host |
+| `NAVORA_AUTH_SECRET` | `dev-secret-change-in-production` | Token signing secret |
+| `NAVORA_DAEMON_BINARY` | auto-detected | Path to `apps/daemon/dist/main.js` |
+| `NAVORA_PROFILE_ID` | `default` | Profile ID for multi-profile routing |
+| `NAVORA_DEBUG` | — | Set to `1` to enable daemon debug logging |
+
+### Native Messaging shim (`nm-shim`, extension → daemon)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NAVORA_RUNTIME_TOKEN` | — | Required WebSocket auth token for shim → daemon |
+| `NAVORA_RUNTIME_HOST` | `127.0.0.1` | Daemon host |
+| `NAVORA_RUNTIME_PORT` | `51520` | Daemon WebSocket port |
+| `NAVORA_RUNTIME_LOCKDIR` | — | Lockfile directory (optional; default under system temp) |
+| `NAVORA_RUNTIME_DAEMON_PATH` | `dist/index.js` | Override path when spawning the daemon |
+| `NAVORA_RUNTIME_MODE` | — | Internal: marks subprocess spawned as daemon |
 
 ---
 

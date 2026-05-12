@@ -33,10 +33,10 @@ interface ShimConfig {
 function parseConfig(): ShimConfig {
   const env = process.env as Record<string, string | undefined>;
   return {
-    host: env["AI_BROWSER_RUNTIME_HOST"] ?? "127.0.0.1",
-    port: parseInt(env["AI_BROWSER_RUNTIME_PORT"] ?? "51432", 10),
-    token: env["AI_BROWSER_RUNTIME_TOKEN"] ?? "",
-    lockDir: env["AI_BROWSER_RUNTIME_LOCKDIR"] ?? "",
+    host: env["NAVORA_RUNTIME_HOST"] ?? "127.0.0.1",
+    port: parseInt(env["NAVORA_RUNTIME_PORT"] ?? "51520", 10),
+    token: env["NAVORA_RUNTIME_TOKEN"] ?? "",
+    lockDir: env["NAVORA_RUNTIME_LOCKDIR"] ?? "",
     connectTimeoutMs: 5000,
     daemonStartupTimeoutMs: 10000,
   };
@@ -118,7 +118,7 @@ async function runShim(): Promise<void> {
   const config = parseConfig();
 
   if (!config.token) {
-    console.error("[shim] ERROR: AI_BROWSER_RUNTIME_TOKEN environment variable is required");
+    console.error("[shim] ERROR: NAVORA_RUNTIME_TOKEN environment variable is required");
     process.exit(1);
   }
 
@@ -131,10 +131,10 @@ async function runShim(): Promise<void> {
   const running = await isDaemonRunning(lockDir);
   if (!running) {
     console.error(`[shim] Spawning daemon...`);
-    const daemonPath = (process.env as Record<string, string | undefined>)["AI_BROWSER_RUNTIME_DAEMON_PATH"] || "dist/index.js";
+    const daemonPath = (process.env as Record<string, string | undefined>)["NAVORA_RUNTIME_DAEMON_PATH"] || "dist/index.js";
     const child = spawn(process.execPath, [daemonPath], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, AI_BROWSER_RUNTIME_MODE: "daemon" },
+      env: { ...process.env, NAVORA_RUNTIME_MODE: "daemon" },
     });
     child.on("exit", (code) => console.error(`[shim] Daemon exited: ${code}`));
   }

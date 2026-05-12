@@ -126,19 +126,21 @@ export default defineBackground(() => {
         const senderTabUrl = sender.tab?.url;
         try {
           const result = await dispatchTool(req.method, params, senderTabId, senderTabUrl);
+          const actionDomain = senderTabUrl ? tryHostname(senderTabUrl) : undefined;
           store.addActivityLog({
             type: 'action',
             action: req.method,
-            domain: senderTabUrl ? tryHostname(senderTabUrl) : undefined,
+            ...(actionDomain !== undefined ? { domain: actionDomain } : {}),
           });
           sendResponse({ success: true, result });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
+          const errorDomain = senderTabUrl ? tryHostname(senderTabUrl) : undefined;
           store.addActivityLog({
             type: 'error',
             action: req.method,
             details: errMsg,
-            domain: senderTabUrl ? tryHostname(senderTabUrl) : undefined,
+            ...(errorDomain !== undefined ? { domain: errorDomain } : {}),
           });
           sendResponse({ success: false, error: { message: errMsg } });
         }
@@ -153,11 +155,11 @@ export default defineBackground(() => {
     senderTabId?: number,
     senderTabUrl?: string
   ): Promise<unknown> {
-    const resolvedTabId = (params.tabId as number | undefined) ?? senderTabId;
+    const resolvedTabId = (params['tabId'] as number | undefined) ?? senderTabId;
 
     // Domain allowlist enforcement (FR-AE-02, FR-PS-02)
     if (MUTATING_TOOLS.has(method)) {
-      const targetUrl = (method === 'navigate' ? (params.url as string) : undefined) ?? senderTabUrl;
+      const targetUrl = (method === 'navigate' ? (params['url'] as string) : undefined) ?? senderTabUrl;
       if (targetUrl) {
         const hostname = tryHostname(targetUrl);
         const { allowlist } = store.getState();
@@ -177,7 +179,7 @@ export default defineBackground(() => {
       }
 
       case 'navigate': {
-        const url = params.url as string;
+        const url = params['url'] as string;
         const tid = resolvedTabId ?? (await activeTabId());
         await chrome.tabs.update(tid, { url });
         return { success: true };
@@ -202,15 +204,15 @@ export default defineBackground(() => {
       }
 
       case 'getCookies': {
-        const domain = params.domain as string | undefined;
+        const domain = params['domain'] as string | undefined;
         return chrome.cookies.getAll(domain ? { domain } : {});
       }
 
       case 'getNetworkRequests': {
-        const filterTabId = (params.tabId as number | undefined) ?? resolvedTabId;
-        const urlPattern = params.urlPattern as string | undefined;
-        const reqMethod = params.method as string | undefined;
-        const since = params.sinceTimestamp as number | undefined;
+        const filterTabId = (params['tabId'] as number | undefined) ?? resolvedTabId;
+        const urlPattern = params['urlPattern'] as string | undefined;
+        const reqMethod = params['method'] as string | undefined;
+        const since = params['sinceTimestamp'] as number | undefined;
         let entries: NetworkEntry[] = filterTabId
           ? (networkBuffer.get(filterTabId) ?? [])
           : Array.from(networkBuffer.values()).flat();

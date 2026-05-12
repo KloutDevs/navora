@@ -2,6 +2,9 @@
  * NM Shim tests
  */
 
+import { mkdtemp } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Buffer } from "buffer";
 import {
@@ -131,13 +134,13 @@ describe("framing", () => {
 describe("parseConfig", () => {
   it("should use defaults when env vars not set", async () => {
     // Clear env
-    const originalToken = process.env.AI_BROWSER_RUNTIME_TOKEN;
-    const originalHost = process.env.AI_BROWSER_RUNTIME_HOST;
-    const originalPort = process.env.AI_BROWSER_RUNTIME_PORT;
+    const originalToken = process.env.NAVORA_RUNTIME_TOKEN;
+    const originalHost = process.env.NAVORA_RUNTIME_HOST;
+    const originalPort = process.env.NAVORA_RUNTIME_PORT;
 
-    delete process.env.AI_BROWSER_RUNTIME_TOKEN;
-    delete process.env.AI_BROWSER_RUNTIME_HOST;
-    delete process.env.AI_BROWSER_RUNTIME_PORT;
+    delete process.env.NAVORA_RUNTIME_TOKEN;
+    delete process.env.NAVORA_RUNTIME_HOST;
+    delete process.env.NAVORA_RUNTIME_PORT;
 
     // Re-import after clearing
     vi.resetModules();
@@ -145,22 +148,22 @@ describe("parseConfig", () => {
     const config = parseConfig();
 
     expect(config.host).toBe("127.0.0.1");
-    expect(config.port).toBe(51432);
+    expect(config.port).toBe(51520);
     expect(config.token).toBe("");
     expect(config.connectTimeoutMs).toBe(5000);
     expect(config.daemonStartupTimeoutMs).toBe(10000);
 
     // Restore
-    if (originalToken !== undefined) process.env.AI_BROWSER_RUNTIME_TOKEN = originalToken;
-    if (originalHost !== undefined) process.env.AI_BROWSER_RUNTIME_HOST = originalHost;
-    if (originalPort !== undefined) process.env.AI_BROWSER_RUNTIME_PORT = originalPort;
+    if (originalToken !== undefined) process.env.NAVORA_RUNTIME_TOKEN = originalToken;
+    if (originalHost !== undefined) process.env.NAVORA_RUNTIME_HOST = originalHost;
+    if (originalPort !== undefined) process.env.NAVORA_RUNTIME_PORT = originalPort;
   });
 
   it("should parse custom values from env", async () => {
-    process.env.AI_BROWSER_RUNTIME_TOKEN = "test-token";
-    process.env.AI_BROWSER_RUNTIME_HOST = "192.168.1.100";
-    process.env.AI_BROWSER_RUNTIME_PORT = "12345";
-    process.env.AI_BROWSER_RUNTIME_LOCKDIR = "/custom/lock";
+    process.env.NAVORA_RUNTIME_TOKEN = "test-token";
+    process.env.NAVORA_RUNTIME_HOST = "192.168.1.100";
+    process.env.NAVORA_RUNTIME_PORT = "12345";
+    process.env.NAVORA_RUNTIME_LOCKDIR = "/custom/lock";
 
     vi.resetModules();
     const { parseConfig } = await import("../src/nm-shim/index");
@@ -172,10 +175,10 @@ describe("parseConfig", () => {
     expect(config.lockDir).toBe("/custom/lock");
 
     // Cleanup
-    delete process.env.AI_BROWSER_RUNTIME_TOKEN;
-    delete process.env.AI_BROWSER_RUNTIME_HOST;
-    delete process.env.AI_BROWSER_RUNTIME_PORT;
-    delete process.env.AI_BROWSER_RUNTIME_LOCKDIR;
+    delete process.env.NAVORA_RUNTIME_TOKEN;
+    delete process.env.NAVORA_RUNTIME_HOST;
+    delete process.env.NAVORA_RUNTIME_PORT;
+    delete process.env.NAVORA_RUNTIME_LOCKDIR;
   });
 });
 
@@ -187,7 +190,11 @@ describe("ShimLockfileManager", () => {
 
   it("should handle missing lockfile", async () => {
     const { ShimLockfileManager } = await import("../src/nm-shim/daemon-connector");
-    const manager = new ShimLockfileManager();
+    const isolatedDir = await mkdtemp(join(tmpdir(), "navora-shim-lock-"));
+    const manager = new ShimLockfileManager({
+      lockDir: isolatedDir,
+      lockFilename: "daemon-test.pid",
+    });
 
     const isRunning = await manager.isDaemonRunning();
     expect(isRunning).toBe(false);

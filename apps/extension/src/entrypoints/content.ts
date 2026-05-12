@@ -156,7 +156,7 @@ export default defineContentScript({
       document.documentElement.appendChild(hudHost);
 
       const shadow = hudHost.attachShadow({ mode: 'open' });
-      const script = confirmation.details.source ? escHtml(String(confirmation.details.source)) : null;
+      const script = confirmation.details['source'] ? escHtml(String(confirmation.details['source'])) : null;
 
       shadow.innerHTML = `
         <style>
@@ -247,12 +247,12 @@ export default defineContentScript({
           switch (method) {
             case 'extractDom':       result = extractDom(); break;
             case 'extractText':      result = extractText(); break;
-            case 'clickElement':     result = clickElement(params.selector as string); break;
-            case 'typeText':         result = typeText(params.text as string, params.selector as string | undefined); break;
-            case 'scroll':           result = scroll(params.selector as string | undefined, params.deltaY as number | undefined); break;
-            case 'waitForSelector':  result = await waitForSelector(params.selector as string, params.timeout as number | undefined); break;
+            case 'clickElement':     result = clickElement(params['selector'] as string); break;
+            case 'typeText':         result = typeText(params['text'] as string, params['selector'] as string | undefined); break;
+            case 'scroll':           result = scroll(params['selector'] as string | undefined, params['deltaY'] as number | undefined); break;
+            case 'waitForSelector':  result = await waitForSelector(params['selector'] as string, params['timeout'] as number | undefined); break;
             case 'getConsoleLogs':   result = consoleLogs.slice(); break;
-            case 'executeScript':    result = executeScript(params.source as string); break;
+            case 'executeScript':    result = executeScript(params['source'] as string); break;
             default:
               sendResponse({ success: false, error: `Unknown method: ${method}` });
               return;

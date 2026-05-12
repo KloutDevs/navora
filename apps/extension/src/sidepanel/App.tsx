@@ -73,7 +73,7 @@ function HUDModal({ confirmation }: { confirmation: ConfirmationRequest }) {
     setPending(null);
   }
 
-  const scriptSource = confirmation.details.source ? String(confirmation.details.source) : null;
+  const scriptSource = confirmation.details['source'] ? String(confirmation.details['source']) : null;
 
   return (
     <div className="hud-overlay">

@@ -118,9 +118,9 @@ let messageBuffer = '';
 
 // Read configuration from environment
 const config = {
-    host: process.env.AI_BROWSER_RUNTIME_HOST || DEFAULT_HOST,
-    port: parseInt(process.env.AI_BROWSER_RUNTIME_PORT || String(DEFAULT_PORT), 10),
-    token: process.env.AI_BROWSER_RUNTIME_TOKEN || ''
+    host: process.env.NAVORA_RUNTIME_HOST || DEFAULT_HOST,
+    port: parseInt(process.env.NAVORA_RUNTIME_PORT || String(DEFAULT_PORT), 10),
+    token: process.env.NAVORA_RUNTIME_TOKEN || ''
 };
 
 function connect() {
@@ -289,9 +289,9 @@ $LauncherContent = @"
 `$Token = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("abr_$(Get-Random -Maximum 999999)"))
 
 # Set environment for shim
-`$env:AI_BROWSER_RUNTIME_TOKEN = `$Token
-`$env:AI_BROWSER_RUNTIME_HOST = "127.0.0.1"
-`$env:AI_BROWSER_RUNTIME_PORT = "51432"
+`$env:NAVORA_RUNTIME_TOKEN = `$Token
+`$env:NAVORA_RUNTIME_HOST = "127.0.0.1"
+`$env:NAVORA_RUNTIME_PORT = "51432"
 
 # Start daemon in background
 `$DaemonScript = Join-Path `$InstallDir "daemon\dist\index.js"

@@ -5,11 +5,11 @@
 
 import { EventEmitter } from "events";
 import { Buffer } from "buffer";
-import { z } from "zod";
+import WebSocket from "ws";
 import type { Result } from "@navora/shared";
 import { ok, err } from "@navora/shared";
-import { NMMessageSchema, NMEnvelopeSchema, NMAcknowledgmentSchema, type NMEnvelope, type NMMessage } from "@navora/protocol";
-import { createNMConnection, type NMConnection, type NMConnectionConfig } from "./connection";
+import { NMEnvelopeSchema, type NMEnvelope, type NMMessage } from "@navora/protocol";
+import type { NMConnectionConfig } from "./connection";
 import { createNMMultiplexer, type NMMultiplexer, type MultiplexerConfig } from "./multiplexer";
 import { createMessageChunker, type MessageChunker } from "./chunking";
 
@@ -53,16 +53,29 @@ export interface ChromeExtensionAdapterConfig {
  */
 export class ChromeExtensionAdapter extends EventEmitter {
   private multiplexer: NMMultiplexer;
-  private chunker: MessageChunker;
+  /** Outbound chunk split (large payloads). */
+  private outboundChunker: MessageChunker;
+  /** Per-profile inbound reassembly (chunked NM payloads). */
+  private inboundChunkers = new Map<string, MessageChunker>();
+  private inboundAccumulators = new Map<string, Buffer[]>();
+  /** Shim path: raw WS payloads (inner NM bytes), one socket per profile. */
+  private shimSockets = new Map<string, WebSocket>();
+
   private requestTimeoutMs: number;
+  private chunkingConfig?: ChromeExtensionAdapterConfig["chunkingConfig"];
   private logger?: ChromeExtensionAdapterConfig["logger"];
-  private pendingRequests: Map<string, { resolve: (envelope: NMEnvelope) => void; reject: (error: Error) => void; timeout: ReturnType<typeof setTimeout> }> = new Map();
+  private pendingRequests: Map<
+    string,
+    {
+      resolve: (r: Result<NMEnvelope, Error>) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  > = new Map();
   private closed = false;
-  
+
   constructor(config: ChromeExtensionAdapterConfig) {
     super();
-    
-    // Create multiplexer (only pass logger if defined)
+
     const muxConfig: MultiplexerConfig = {
       defaultConnectionConfig: config.defaultConnectionConfig,
     };
@@ -70,187 +83,251 @@ export class ChromeExtensionAdapter extends EventEmitter {
       muxConfig.logger = config.logger;
     }
     this.multiplexer = createNMMultiplexer(muxConfig);
-    
-    // Create chunker
-    this.chunker = createMessageChunker(config.chunkingConfig);
-    
-    // Set timeout
+
+    this.outboundChunker = createMessageChunker(config.chunkingConfig);
+    this.chunkingConfig = config.chunkingConfig;
+
     this.requestTimeoutMs = config.requestTimeoutMs ?? 30000;
     this.logger = config.logger;
-    
-    // Forward multiplex events
+
     this.setupEventForwarding();
   }
-  
-  /**
-   * Set up event forwarding from multiplexer
-   */
+
   private setupEventForwarding(): void {
     this.multiplexer.on("message", (message: Buffer, context: { profileId: string }) => {
-      this.handleMessage(message, context.profileId);
+      this.feedInbound(context.profileId, message);
     });
-    
+
     this.multiplexer.on("connect", ({ profileId }: { profileId: string }) => {
       this.emit("connect", profileId);
     });
-    
-    this.multiplexer.on("disconnect", ({ profileId, error }: { profileId: string; error?: Error }) => {
-      // Cancel pending requests for this profile
-      for (const [requestId, pending] of this.pendingRequests) {
-        // We can't know which profile, but we can cancel all on disconnect
+
+    this.multiplexer.on("disconnect", ({ profileId }: { profileId: string }) => {
+      for (const requestId of [...this.pendingRequests.keys()]) {
         this.clearRequest(requestId);
       }
       this.emit("disconnect", profileId);
     });
-    
+
     this.multiplexer.on("error", ({ profileId, error }: { profileId: string; error: Error }) => {
       this.logger?.error?.(`Adapter: profile ${profileId} error - ${error.message}`);
       this.emit("error", error, { profileId });
     });
   }
-  
+
   /**
-   * Handle incoming message
+   * Attach daemon WebSocket from NM shim (inner NM payloads, no extra length-prefix layer).
    */
-  private handleMessage(message: Buffer, profileId: string): void {
+  attachWebSocketBridge(profileId: string, ws: WebSocket): void {
+    if (this.closed) {
+      this.logger?.warn?.("Adapter: cannot attach shim — adapter closed");
+      return;
+    }
+
+    const existing = this.shimSockets.get(profileId);
+    if (existing && existing !== ws) {
+      try {
+        existing.close();
+      } catch {
+        /* ignore */
+      }
+    }
+
+    this.shimSockets.set(profileId, ws);
+
+    ws.on("message", (data: WebSocket.RawData) => {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+      this.feedInbound(profileId, buf);
+    });
+
+    ws.on("close", () => {
+      if (this.shimSockets.get(profileId) === ws) {
+        this.shimSockets.delete(profileId);
+      }
+      this.inboundChunkers.delete(profileId);
+      this.inboundAccumulators.delete(profileId);
+      for (const requestId of [...this.pendingRequests.keys()]) {
+        this.clearRequest(requestId);
+      }
+      this.emit("disconnect", profileId);
+    });
+
+    ws.on("error", (e) => {
+      this.logger?.warn?.(`Adapter: shim socket error ${profileId}: ${e.message}`);
+    });
+
+    this.emit("connect", profileId);
+  }
+
+  /**
+   * Reassemble chunked payloads then parse NM envelope JSON.
+   */
+  private feedInbound(profileId: string, fragment: Buffer): void {
     try {
-      // Try to parse as envelope
+      // Fast path: JSON object / envelope (starts with '{')
+      if (fragment.length > 0 && fragment[0] === 0x7b) {
+        this.processEnvelopeBuffer(profileId, fragment);
+        return;
+      }
+
+      let chunker = this.inboundChunkers.get(profileId);
+      if (!chunker) {
+        chunker = createMessageChunker(this.chunkingConfig);
+        this.inboundChunkers.set(profileId, chunker);
+      }
+
+      const acc = this.inboundAccumulators.get(profileId) ?? [];
+      acc.push(fragment);
+
+      const first = acc[0];
+      if (!first || first.length < 8) {
+        this.inboundAccumulators.set(profileId, acc);
+        return;
+      }
+
+      const totalChunks = first.readUInt32LE(4);
+      if (acc.length < totalChunks) {
+        this.inboundAccumulators.set(profileId, acc);
+        return;
+      }
+
+      const assembled = chunker.assemble(acc);
+      this.inboundAccumulators.delete(profileId);
+
+      if (!assembled) {
+        this.logger?.warn?.(`Adapter: chunk assemble failed for ${profileId}`);
+        return;
+      }
+
+      this.processEnvelopeBuffer(profileId, assembled);
+    } catch (error) {
+      this.logger?.error?.(`Adapter: feedInbound failed - ${error}`);
+    }
+  }
+
+  private processEnvelopeBuffer(profileId: string, message: Buffer): void {
+    try {
       const parsed = JSON.parse(message.toString("utf8"));
       const envelopeResult = NMEnvelopeSchema.safeParse(parsed);
-      
+
       if (!envelopeResult.success) {
         this.logger?.warn?.(`Adapter: received invalid envelope from ${profileId}`);
         return;
       }
-      
+
       const envelope = envelopeResult.data;
-      
-      // Handle based on kind
+
       if (envelope.kind === "request") {
-        // Incoming request - emit for handler
         this.emit("request", envelope, { profileId });
-        
-        // Send acknowledgment
-        this.sendAcknowledgment(profileId, envelope.request_id);
-        
+        void this.sendAcknowledgment(profileId, envelope.request_id);
       } else if (envelope.kind === "response") {
-        // Response to our request - resolve pending
         const pending = this.pendingRequests.get(envelope.request_id);
-        
+
         if (pending) {
           clearTimeout(pending.timeout);
-          pending.resolve(envelope);
+          pending.resolve(ok(envelope));
           this.pendingRequests.delete(envelope.request_id);
         }
-        
+
         this.emit("response", envelope, { profileId });
-        
       } else if (envelope.kind === "error") {
-        // Error response - reject pending
         const pending = this.pendingRequests.get(envelope.request_id ?? "");
-        
+
         if (pending) {
           clearTimeout(pending.timeout);
-          pending.reject(new Error(envelope.message));
+          pending.resolve(err(new Error(envelope.message)));
           this.pendingRequests.delete(envelope.request_id ?? "");
         }
-        
+
         this.emit("error", new Error(envelope.message), { profileId });
       }
     } catch (error) {
-      this.logger?.error?.(`Adapter: failed to handle message - ${error}`);
+      this.logger?.error?.(`Adapter: failed to process envelope - ${error}`);
     }
   }
-  
-  /**
-   * Send acknowledgment for a request
-   */
-  private sendAcknowledgment(profileId: string, requestId: string): void {
+
+  private async sendAcknowledgment(profileId: string, requestId: string): Promise<void> {
     const ack = {
       request_id: requestId,
       received_at: Date.now(),
     };
-    
-    this.sendRaw(profileId, Buffer.from(JSON.stringify(ack), "utf8"));
+
+    await this.sendRaw(profileId, Buffer.from(JSON.stringify(ack), "utf8"));
   }
-  
-  /**
-   * Send raw message to profile
-   */
+
   private async sendRaw(profileId: string, message: Buffer): Promise<Result<void, Error>> {
-    const chunks = this.chunker.chunk(message);
-    
+    const chunks = this.outboundChunker.chunk(message);
+
+    const ws = this.shimSockets.get(profileId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      for (const chunk of chunks) {
+        ws.send(chunk);
+      }
+      return ok(undefined);
+    }
+
     for (const chunk of chunks) {
-      const profileIds = this.multiplexer.getProfileIds();
       const result = await this.multiplexer.sendToProfile(profileId, chunk);
-      
+
       if (!result.success) {
         return err(result.error ?? new Error("Send failed"));
       }
     }
-    
+
     return ok(undefined);
   }
-  
+
   /**
-   * Connect a profile's stream
+   * Connect a profile's stream (stdio / framed NM host path)
    */
-  connect(profileId: string, stream: { read: any; write: any }): void {
+  connect(profileId: string, stream: { read: unknown; write: unknown }): void {
     if (this.closed) {
       this.logger?.warn?.("Adapter: cannot connect - adapter closed");
       return;
     }
-    
+
     this.multiplexer.createConnection(profileId, stream);
   }
-  
-  /**
-   * Send a request to a profile
-   */
+
   async sendRequest(
     profileId: string,
-    request: Omit<NMMessage, "request_id">
+    request: Omit<NMMessage, "request_id">,
+    options?: { requestId?: string; timeoutMs?: number }
   ): Promise<Result<NMEnvelope, Error>> {
     if (this.closed) {
       return err(new Error("Adapter closed"));
     }
-    
-    // Generate request ID
-    const requestId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+
+    const requestId =
+      options?.requestId ?? `req-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
     const envelope: NMEnvelope = {
       kind: "request",
       request_id: requestId,
       ...request,
     };
-    
-    // Serialize and send
+
     const message = Buffer.from(JSON.stringify(envelope), "utf8");
     const sendResult = await this.sendRaw(profileId, message);
-    
+
     if (!sendResult.ok) {
       return err(sendResult.error);
     }
-    
-    // Wait for response
+
+    const timeoutMs = options?.timeoutMs ?? this.requestTimeoutMs;
+
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(requestId);
         resolve(err(new Error(`Request ${requestId} timed out`)));
-      }, this.requestTimeoutMs);
-      
-      const resolveFn = (envelope: NMEnvelope) => resolve(ok(envelope) as unknown as Result<NMEnvelope, Error>);
-      
+      }, timeoutMs);
+
       this.pendingRequests.set(requestId, {
-        resolve: resolveFn,
-        reject: (error: Error) => resolve(err(error)),
+        resolve,
         timeout,
       });
     });
   }
-  
-  /**
-   * Send a response to a profile
-   */
+
   async sendResponse(
     profileId: string,
     requestId: string,
@@ -264,14 +341,11 @@ export class ChromeExtensionAdapter extends EventEmitter {
       result,
       error,
     };
-    
+
     const message = Buffer.from(JSON.stringify(envelope), "utf8");
     return this.sendRaw(profileId, message);
   }
-  
-  /**
-   * Send error to a profile
-   */
+
   async sendError(
     profileId: string,
     requestId: string | undefined,
@@ -284,26 +358,20 @@ export class ChromeExtensionAdapter extends EventEmitter {
       code,
       message: errorMessage,
     };
-    
+
     const message = Buffer.from(JSON.stringify(envelope), "utf8");
     return this.sendRaw(profileId, message);
   }
-  
-  /**
-   * Clear a pending request
-   */
+
   private clearRequest(requestId: string): void {
     const pending = this.pendingRequests.get(requestId);
     if (pending) {
       clearTimeout(pending.timeout);
-      pending.reject(new Error("Request cancelled"));
+      pending.resolve(err(new Error("Request cancelled")));
       this.pendingRequests.delete(requestId);
     }
   }
-  
-  /**
-   * Cancel all pending requests
-   */
+
   cancelAllRequests(): number {
     let count = 0;
     for (const requestId of this.pendingRequests.keys()) {
@@ -312,51 +380,43 @@ export class ChromeExtensionAdapter extends EventEmitter {
     }
     return count;
   }
-  
-  /**
-   * Get pending request count
-   */
+
   getPendingRequestCount(): number {
     return this.pendingRequests.size;
   }
-  
-  /**
-   * Check if profile is connected
-   */
+
   isProfileConnected(profileId: string): boolean {
-    return this.multiplexer.hasConnection(profileId);
+    return this.shimSockets.has(profileId) || this.multiplexer.hasConnection(profileId);
   }
-  
-  /**
-   * Get all connected profile IDs
-   */
+
   getConnectedProfiles(): string[] {
-    return this.multiplexer.getProfileIds().filter((id) => 
-      this.multiplexer.hasConnection(id)
-    );
+    const fromMux = this.multiplexer.getProfileIds().filter((id) => this.multiplexer.hasConnection(id));
+    const fromShim = [...this.shimSockets.keys()];
+    return [...new Set([...fromMux, ...fromShim])];
   }
-  
-  /**
-   * Get the underlying multiplexer (for advanced operations)
-   */
+
   getMultiplexer(): NMMultiplexer {
     return this.multiplexer;
   }
-  
-  /**
-   * Destroy the adapter
-   */
+
   destroy(): void {
     this.closed = true;
     this.cancelAllRequests();
+    for (const ws of this.shimSockets.values()) {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.shimSockets.clear();
+    this.inboundChunkers.clear();
+    this.inboundAccumulators.clear();
     this.multiplexer.destroy();
     this.removeAllListeners();
   }
 }
 
-/**
- * Create a ChromeExtensionAdapter
- */
 export function createChromeExtensionAdapter(config: ChromeExtensionAdapterConfig): ChromeExtensionAdapter {
   return new ChromeExtensionAdapter(config);
 }

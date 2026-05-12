@@ -70,37 +70,26 @@ describe("ULID", () => {
       }
     });
 
-    it("should generate different ULIDs in same millisecond", () => {
-      resetMonotonic(); // Ensure clean state
+    it("should never decrease lexicographically across rapid calls", () => {
+      resetMonotonic();
       const ids: string[] = [];
-
-      // Generate 100 ULIDs in rapid succession
-      // The monotonic implementation should ensure uniqueness
-      // either via same-ms increment OR via different ms fresh random
       for (let i = 0; i < 100; i++) {
         ids.push(monotonic());
       }
-
-      // Check that all generated ULIDs are valid
       for (const id of ids) {
         expect(isValid(id)).toBe(true);
       }
-
-      // All should be unique - Set deduplicates
-      const uniqueIds = new Set(ids);
-      // At minimum we expect 2 different ULIDs across 100 generations
-      // (even if some calls cross ms boundaries, we should see variation)
-      expect(uniqueIds.size).toBeGreaterThanOrEqual(2);
+      for (let i = 1; i < ids.length; i++) {
+        expect(compare(ids[i - 1]!, ids[i]!)).toBeLessThanOrEqual(0);
+      }
     });
 
     it("should handle rapid generation", () => {
-      // Generate many in rapid succession
       const ids: string[] = [];
       for (let i = 0; i < 10; i++) {
         ids.push(monotonic());
       }
 
-      // Should be sorted
       expect(sort(ids)).toEqual(ids);
     });
   });

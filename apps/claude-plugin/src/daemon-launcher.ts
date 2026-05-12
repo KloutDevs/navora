@@ -4,13 +4,15 @@
  */
 
 import { spawn } from 'node:child_process';
+import { mkdirSync, openSync, readFileSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import net from 'node:net';
 
-const DAEMON_PORT = Number(process.env['AI_BROWSER_DAEMON_PORT'] ?? 51432);
-const DAEMON_HOST = process.env['AI_BROWSER_DAEMON_HOST'] ?? '127.0.0.1';
+const DAEMON_PORT = Number(process.env['NAVORA_DAEMON_PORT'] ?? 51520);
+const DAEMON_HOST = process.env['NAVORA_DAEMON_HOST'] ?? '127.0.0.1';
 
 function isDaemonReachable(): Promise<boolean> {
   return new Promise((resolve) => {
@@ -23,8 +25,8 @@ function isDaemonReachable(): Promise<boolean> {
 }
 
 function resolveDaemonBinary(): { mode: 'node'; path: string } | { mode: 'npx'; pkg: string } {
-  if (process.env['AI_BROWSER_DAEMON_BINARY']) {
-    return { mode: 'node', path: process.env['AI_BROWSER_DAEMON_BINARY'] };
+  if (process.env['NAVORA_DAEMON_BINARY']) {
+    return { mode: 'node', path: process.env['NAVORA_DAEMON_BINARY'] };
   }
 
   // Monorepo layout: <workspace-root>/apps/daemon/dist/main.js
@@ -41,28 +43,63 @@ function resolveDaemonBinary(): { mode: 'node'; path: string } | { mode: 'npx'; 
   return { mode: 'npx', pkg: 'navora-daemon' };
 }
 
+function clearStaleLockfile(): void {
+  const lockPath = join(tmpdir(), 'ai-browser-runtime', 'daemon.pid');
+  try {
+    const content = readFileSync(lockPath, 'utf8');
+    const { pid } = JSON.parse(content) as { pid: number };
+    let alive = false;
+    try {
+      if (process.platform === 'win32') {
+        const { execSync } = require('child_process') as typeof import('child_process');
+        const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, { stdio: 'pipe' }).toString();
+        alive = out.includes(String(pid));
+      } else {
+        process.kill(pid, 0);
+        alive = true;
+      }
+    } catch { alive = false; }
+    if (!alive) unlinkSync(lockPath);
+  } catch { /* no lockfile or already clean */ }
+}
+
+function openLogFd(): number {
+  try {
+    const logDir = join(tmpdir(), 'ai-browser-runtime');
+    mkdirSync(logDir, { recursive: true });
+    return openSync(join(logDir, 'daemon.log'), 'a');
+  } catch {
+    return -1;
+  }
+}
+
 export async function ensureDaemon(): Promise<void> {
   if (await isDaemonReachable()) return;
 
+  clearStaleLockfile();
   const binary = resolveDaemonBinary();
   process.stderr.write(`[ai-browser] Starting daemon (${DAEMON_HOST}:${DAEMON_PORT})...\n`);
 
+  const logFd = openLogFd();
+  const errIo = logFd >= 0 ? logFd : 'ignore' as const;
+  const sharedOpts = {
+    detached: true,
+    stdio: ['ignore', 'ignore', errIo] as ['ignore', 'ignore', number | 'ignore'],
+    windowsHide: true,
+    env: { ...process.env },
+  };
+
   const proc = binary.mode === 'node'
-    ? spawn(process.execPath, [binary.path], {
-        detached: true,
-        stdio: 'ignore',
-        env: { ...process.env },
-      })
-    : spawn('npx', [binary.pkg], {
-        detached: true,
-        stdio: 'ignore',
-        shell: true,
-        env: { ...process.env },
-      });
+    ? spawn(process.execPath, [binary.path], sharedOpts)
+    : spawn(
+        process.platform === 'win32' ? 'npx.cmd' : 'npx',
+        ['-y', binary.pkg],
+        { ...sharedOpts, shell: process.platform === 'win32' }
+      );
   proc.unref();
 
-  // Wait up to 6 seconds for daemon to be reachable
-  const deadline = Date.now() + 6000;
+  // Wait up to 8 seconds for daemon to be reachable
+  const deadline = Date.now() + 8000;
   while (Date.now() < deadline) {
     await new Promise(r => setTimeout(r, 300));
     if (await isDaemonReachable()) {

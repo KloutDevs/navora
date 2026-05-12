@@ -92,8 +92,9 @@ export class LockfileManager {
       if (process.platform === "win32") {
         const { execSync } = require("child_process");
         try {
-          execSync(`tasklist /FI "PID eq ${pid}" /NH`, { stdio: "pipe" });
-          return true;
+          // tasklist exits 0 even when the PID doesn't exist — must check output
+          const out: string = execSync(`tasklist /FI "PID eq ${pid}" /NH`, { stdio: "pipe" }).toString();
+          return out.includes(String(pid));
         } catch {
           return false;
         }

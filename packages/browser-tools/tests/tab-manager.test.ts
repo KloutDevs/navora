@@ -91,8 +91,9 @@ describe("TabManager", () => {
   describe("get", () => {
     it("should return tab by ID", () => {
       manager.syncTabs([{ targetId: "42", url: "https://test.com" }]);
-      const tab = manager.get(42);
+      const tab = manager.get(1);
       expect(tab?.url).toBe("https://test.com");
+      expect(tab?.targetId).toBe("42");
     });
 
     it("should return undefined for missing tab", () => {

@@ -140,15 +140,15 @@ export function spawnDaemon(
   // Find the daemon entry point
   // In production, this would be the bundled daemon
   // For development, we use ts-node or the dist path
-  const daemonPath = (process.env as Record<string, string | undefined>)["AI_BROWSER_RUNTIME_DAEMON_PATH"] || "dist/index.js";
+  const daemonPath = (process.env as Record<string, string | undefined>)["NAVORA_RUNTIME_DAEMON_PATH"] || "dist/index.js";
 
   const child = spawn(process.execPath, [daemonPath], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       ...process.env,
-      AI_BROWSER_RUNTIME_MODE: "daemon",
-      AI_BROWSER_RUNTIME_HOST: config.host,
-      AI_BROWSER_RUNTIME_PORT: config.port.toString(),
+      NAVORA_RUNTIME_MODE: "daemon",
+      NAVORA_RUNTIME_HOST: config.host,
+      NAVORA_RUNTIME_PORT: config.port.toString(),
     },
     detached: false,
   });

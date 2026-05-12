@@ -187,7 +187,7 @@ export function PopupApp() {
       if (message.type === 'STATE_UPDATE') {
         useUIStore.setState(message.payload as ExtensionState);
       } else if (message.type === 'CONNECTION_STATUS') {
-        useUIStore.setConnectionStatus(message.payload as ConnectionStatus);
+        useUIStore.getState().setConnectionStatus(message.payload as ConnectionStatus);
       }
     };
 

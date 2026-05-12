@@ -9,10 +9,10 @@
  *   node shim.js
  * 
  * Environment:
- *   AI_BROWSER_RUNTIME_TOKEN - WebSocket auth token (required)
- *   AI_BROWSER_RUNTIME_HOST - Daemon host (default: 127.0.0.1)
- *   AI_BROWSER_RUNTIME_PORT - Daemon port (default: 51432)
- *   AI_BROWSER_RUNTIME_LOCKDIR - Lockfile directory
+ *   NAVORA_RUNTIME_TOKEN - WebSocket auth token (required)
+ *   NAVORA_RUNTIME_HOST - Daemon host (default: 127.0.0.1)
+ *   NAVORA_RUNTIME_PORT - Daemon port (default: 51520)
+ *   NAVORA_RUNTIME_LOCKDIR - Lockfile directory
  */
 
 import { Buffer } from "buffer";
@@ -62,7 +62,7 @@ class NMShim {
 
     // Validate token
     if (!this.config.token) {
-      this.error("AI_BROWSER_RUNTIME_TOKEN environment variable is required");
+      this.error("NAVORA_RUNTIME_TOKEN environment variable is required");
       process.exit(1);
     }
 

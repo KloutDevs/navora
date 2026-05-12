@@ -16,7 +16,8 @@ export interface AdapterRegistryConfig {
 
 export interface AdapterEntry {
   adapter: BrowserAdapter;
-  profileId: string;
+  /** Compound key e.g. `nm:<profileId>` or `cdp:<port>` */
+  registryKey: string;
   createdAt: number;
   lastUsed: number;
   activeTabs: number;
@@ -37,29 +38,29 @@ export class AdapterRegistry {
   }
 
   /**
-   * Register an adapter for a profile
+   * Register an adapter under a compound registry key (`nm:…`, `cdp:…`).
    */
-  register(profileId: string, adapter: BrowserAdapter): Result<void, Error> {
-    if (this.adapters.has(profileId)) {
-      this.logger?.warn?.(`AdapterRegistry: overwriting existing adapter for ${profileId}`);
+  register(registryKey: string, adapter: BrowserAdapter): Result<void, Error> {
+    if (this.adapters.has(registryKey)) {
+      this.logger?.warn?.(`AdapterRegistry: overwriting existing adapter for ${registryKey}`);
       // Clean up old adapter
-      this.unregister(profileId);
+      void this.unregister(registryKey);
     }
 
     const entry: AdapterEntry = {
       adapter,
-      profileId,
+      registryKey,
       createdAt: Date.now(),
       lastUsed: Date.now(),
       activeTabs: 0,
     };
 
-    this.adapters.set(profileId, entry);
-    this.logger?.info?.(`AdapterRegistry: registered adapter for ${profileId}`);
+    this.adapters.set(registryKey, entry);
+    this.logger?.info?.(`AdapterRegistry: registered adapter for ${registryKey}`);
 
     // Forward events to listeners
     adapter.on((event) => {
-      const listeners = this.eventListeners.get(profileId);
+      const listeners = this.eventListeners.get(registryKey);
       if (listeners) {
         for (const listener of listeners) {
           listener(event);
@@ -73,35 +74,35 @@ export class AdapterRegistry {
   /**
    * Unregister an adapter
    */
-  async unregister(profileId: string): Promise<Result<void, Error>> {
-    const entry = this.adapters.get(profileId);
+  async unregister(registryKey: string): Promise<Result<void, Error>> {
+    const entry = this.adapters.get(registryKey);
     if (!entry) {
       return ok(undefined); // Already unregistered
     }
 
     try {
       await entry.adapter.dispose();
-      this.adapters.delete(profileId);
-      this.eventListeners.delete(profileId);
-      this.logger?.info?.(`AdapterRegistry: unregistered ${profileId}`);
+      this.adapters.delete(registryKey);
+      this.eventListeners.delete(registryKey);
+      this.logger?.info?.(`AdapterRegistry: unregistered ${registryKey}`);
       return ok(undefined);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      this.logger?.error?.(`AdapterRegistry: failed to unregister ${profileId}: ${errMsg}`);
+      this.logger?.error?.(`AdapterRegistry: failed to unregister ${registryKey}: ${errMsg}`);
       // Still remove from map even if dispose failed
-      this.adapters.delete(profileId);
-      this.eventListeners.delete(profileId);
+      this.adapters.delete(registryKey);
+      this.eventListeners.delete(registryKey);
       return err(new Error(`Failed to dispose adapter: ${errMsg}`));
     }
   }
 
   /**
-   * Get an adapter for a profile
+   * Get an adapter by registry key
    */
-  get(profileId: string): Result<BrowserAdapter, Error> {
-    const entry = this.adapters.get(profileId);
+  get(registryKey: string): Result<BrowserAdapter, Error> {
+    const entry = this.adapters.get(registryKey);
     if (!entry) {
-      return err(new Error(`No adapter registered for profile: ${profileId}`));
+      return err(new Error(`No adapter registered for key: ${registryKey}`));
     }
 
     entry.lastUsed = Date.now();
@@ -109,14 +110,14 @@ export class AdapterRegistry {
   }
 
   /**
-   * Check if an adapter exists for a profile
+   * Check if an adapter exists for a registry key
    */
-  has(profileId: string): boolean {
-    return this.adapters.has(profileId);
+  has(registryKey: string): boolean {
+    return this.adapters.has(registryKey);
   }
 
   /**
-   * List all registered profiles
+   * List all registered keys
    */
   listProfiles(): string[] {
     return Array.from(this.adapters.keys());
@@ -125,14 +126,14 @@ export class AdapterRegistry {
   /**
    * Get adapter stats
    */
-  getStats(profileId: string): Result<AdapterStats, Error> {
-    const entry = this.adapters.get(profileId);
+  getStats(registryKey: string): Result<AdapterStats, Error> {
+    const entry = this.adapters.get(registryKey);
     if (!entry) {
-      return err(new Error(`No adapter for profile: ${profileId}`));
+      return err(new Error(`No adapter for key: ${registryKey}`));
     }
 
     return ok({
-      profileId: entry.profileId,
+      registryKey: entry.registryKey,
       createdAt: entry.createdAt,
       lastUsed: entry.lastUsed,
       activeTabs: entry.activeTabs,
@@ -143,15 +144,15 @@ export class AdapterRegistry {
   /**
    * Subscribe to adapter events
    */
-  on(profileId: string, listener: BrowserAdapterEventListener): Result<void, Error> {
-    if (!this.adapters.has(profileId)) {
-      return err(new Error(`No adapter registered for profile: ${profileId}`));
+  on(registryKey: string, listener: BrowserAdapterEventListener): Result<void, Error> {
+    if (!this.adapters.has(registryKey)) {
+      return err(new Error(`No adapter registered for key: ${registryKey}`));
     }
 
-    let listeners = this.eventListeners.get(profileId);
+    let listeners = this.eventListeners.get(registryKey);
     if (!listeners) {
       listeners = new Set();
-      this.eventListeners.set(profileId, listeners);
+      this.eventListeners.set(registryKey, listeners);
     }
     listeners.add(listener);
 
@@ -161,8 +162,8 @@ export class AdapterRegistry {
   /**
    * Unsubscribe from adapter events
    */
-  off(profileId: string, listener: BrowserAdapterEventListener): Result<void, Error> {
-    const listeners = this.eventListeners.get(profileId);
+  off(registryKey: string, listener: BrowserAdapterEventListener): Result<void, Error> {
+    const listeners = this.eventListeners.get(registryKey);
     if (!listeners) {
       return ok(undefined);
     }
@@ -183,12 +184,12 @@ export class AdapterRegistry {
    */
   async closeAll(): Promise<Result<void, Error>> {
     const errors: string[] = [];
-    const profileIds = Array.from(this.adapters.keys());
+    const keys = Array.from(this.adapters.keys());
 
-    for (const profileId of profileIds) {
-      const result = await this.unregister(profileId);
+    for (const registryKey of keys) {
+      const result = await this.unregister(registryKey);
       if (isError(result)) {
-        errors.push(`${profileId}: ${result.error.message}`);
+        errors.push(`${registryKey}: ${result.error.message}`);
       }
     }
 
@@ -220,7 +221,7 @@ export class AdapterRegistry {
 }
 
 export interface AdapterStats {
-  profileId: string;
+  registryKey: string;
   createdAt: number;
   lastUsed: number;
   activeTabs: number;

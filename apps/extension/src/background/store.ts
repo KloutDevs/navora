@@ -3,9 +3,9 @@
  */
 
 import { create as createZustandStore } from 'zustand';
-import type { ExtensionState, ConnectionStatus, DomainAllowlist, ActivityLogEntry } from '../../shared/types';
+import type { ExtensionState, ConnectionStatus, DomainAllowlist, ActivityLogEntry } from '../shared/types';
 
-interface ExtensionStore extends ExtensionState {
+interface ExtensionStore {
   setConnectionStatus: (status: ConnectionStatus) => void;
   setAllowlist: (allowlist: DomainAllowlist) => void;
   addActivityLog: (entry: Omit<ActivityLogEntry, 'id' | 'timestamp'>) => void;

@@ -9,13 +9,13 @@
  * 
  * Communication:
  * - stdin/stdout: Chrome native messaging (4-byte length prefix)
- * - WebSocket: Daemon connection on 127.0.0.1:51432
+ * - WebSocket: Daemon connection on 127.0.0.1:51520
  * 
  * Environment:
- * - AI_BROWSER_RUNTIME_TOKEN: WebSocket auth token (required)
- * - AI_BROWSER_RUNTIME_HOST: Daemon host (default: 127.0.0.1)
- * - AI_BROWSER_RUNTIME_PORT: Daemon port (default: 51432)
- * - AI_BROWSER_RUNTIME_LOCKDIR: Lockfile directory (default: temp/ai-browser-runtime)
+ * - NAVORA_RUNTIME_TOKEN: WebSocket auth token (required)
+ * - NAVORA_RUNTIME_HOST: Daemon host (default: 127.0.0.1)
+ * - NAVORA_RUNTIME_PORT: Daemon port (default: 51520)
+ * - NAVORA_RUNTIME_LOCKDIR: Lockfile directory (default: temp/ai-browser-runtime)
  */
 
 import * as readline from "readline";
@@ -41,10 +41,10 @@ export interface ShimConfig {
 export function parseConfig(): ShimConfig {
   const env = process.env as Record<string, string | undefined>;
   return {
-    host: env["AI_BROWSER_RUNTIME_HOST"] ?? "127.0.0.1",
-    port: parseInt(env["AI_BROWSER_RUNTIME_PORT"] ?? "51432", 10),
-    token: env["AI_BROWSER_RUNTIME_TOKEN"] ?? "",
-    lockDir: env["AI_BROWSER_RUNTIME_LOCKDIR"] ?? "",
+    host: env["NAVORA_RUNTIME_HOST"] ?? "127.0.0.1",
+    port: parseInt(env["NAVORA_RUNTIME_PORT"] ?? "51520", 10),
+    token: env["NAVORA_RUNTIME_TOKEN"] ?? "",
+    lockDir: env["NAVORA_RUNTIME_LOCKDIR"] ?? "",
     lockFilename: "daemon.pid",
     connectTimeoutMs: 5000,
     daemonStartupTimeoutMs: 10000,

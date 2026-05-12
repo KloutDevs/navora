@@ -137,9 +137,9 @@ let messageBuffer = '';
 
 // Read configuration from environment
 const config = {
-    host: process.env.AI_BROWSER_RUNTIME_HOST || DEFAULT_HOST,
-    port: parseInt(process.env.AI_BROWSER_RUNTIME_PORT || String(DEFAULT_PORT), 10),
-    token: process.env.AI_BROWSER_RUNTIME_TOKEN || ''
+    host: process.env.NAVORA_RUNTIME_HOST || DEFAULT_HOST,
+    port: parseInt(process.env.NAVORA_RUNTIME_PORT || String(DEFAULT_PORT), 10),
+    token: process.env.NAVORA_RUNTIME_TOKEN || ''
 };
 
 function connect() {
@@ -325,9 +325,9 @@ INSTALL_DIR="$(dirname "$SCRIPT_DIR")"
 TOKEN="abr_$(head -c 100 /dev/urandom | base64 | head -c 20)"
 
 # Set environment for shim
-export AI_BROWSER_RUNTIME_TOKEN="$TOKEN"
-export AI_BROWSER_RUNTIME_HOST="127.0.0.1"
-export AI_BROWSER_RUNTIME_PORT="51432"
+export NAVORA_RUNTIME_TOKEN="$TOKEN"
+export NAVORA_RUNTIME_HOST="127.0.0.1"
+export NAVORA_RUNTIME_PORT="51432"
 
 # Start daemon in background
 DAEMON_SCRIPT="$INSTALL_DIR/daemon/dist/index.js"

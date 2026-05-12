@@ -1,21 +1,28 @@
 import { defineConfig } from 'tsup';
 
+const sharedConfig = {
+  format: ['esm'] as const,
+  target: 'node18' as const,
+  bundle: true,
+  splitting: false,
+  sourcemap: false,
+  noExternal: [
+    '@navora/browser-tools',
+    '@navora/shared',
+    '@navora/mcp',
+    '@navora/protocol',
+  ],
+};
+
 export default defineConfig([
   {
+    ...sharedConfig,
     entry: { main: 'src/main.ts' },
-    format: ['esm'],
-    target: 'node18',
-    bundle: true,
-    splitting: false,
-    sourcemap: false,
     clean: true,
-    // Bundle all @navora/* workspace packages so the published binary is self-contained.
-    // ws and better-sqlite3 stay external (native/large; listed as real deps in package.json).
-    noExternal: [
-      '@navora/browser-tools',
-      '@navora/shared',
-      '@navora/mcp',
-      '@navora/protocol',
-    ],
+  },
+  {
+    ...sharedConfig,
+    entry: { 'nm-shim-cli': 'src/nm-shim/cli.ts' },
+    clean: false,
   },
 ]);

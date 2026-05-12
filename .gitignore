@@ -36,9 +36,12 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 *.db
+*.db-shm
+*.db-wal
 tmp/
 temp/
 **/.test-temp/
+**/.test-temp-perms/
 
 # TypeScript accidentally emitted next to sources (outDir should be dist/)
 packages/**/src/**/*.js

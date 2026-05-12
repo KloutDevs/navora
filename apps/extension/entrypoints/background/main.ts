@@ -2,9 +2,9 @@
  * Background Service Worker Entry Point
  */
 
-import { getNMClient } from '../../background/nm-client';
-import { createExtensionStore } from '../../background/store';
-import type { ConnectionStatus, DomainAllowlist } from '../../shared/types';
+import { getNMClient } from '../../src/background/nm-client';
+import { createExtensionStore } from '../../src/background/store';
+import type { ConnectionStatus, DomainAllowlist } from '../../src/shared/types';
 
 export default defineBackground(() => {
   const nmClient = getNMClient();

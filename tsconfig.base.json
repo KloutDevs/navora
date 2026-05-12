@@ -23,14 +23,14 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@ai-browser-runtime/protocol": ["packages/protocol/src"],
-      "@ai-browser-runtime/shared": ["packages/shared/src"],
-      "@ai-browser-runtime/browser-tools": ["packages/browser-tools/src"],
-      "@ai-browser-runtime/mcp": ["packages/mcp/src"],
-      "@ai-browser-runtime/ui": ["packages/ui/src"],
-      "@ai-browser-runtime/daemon": ["apps/daemon/src"],
-      "@ai-browser-runtime/extension": ["apps/extension/src"],
-      "@ai-browser-runtime/claude-plugin": ["apps/claude-plugin/src"]
+      "@navora/protocol": ["packages/protocol/src"],
+      "@navora/shared": ["packages/shared/src"],
+      "@navora/browser-tools": ["packages/browser-tools/src"],
+      "@navora/mcp": ["packages/mcp/src"],
+      "@navora/ui": ["packages/ui/src"],
+      "@navora/daemon": ["apps/daemon/src"],
+      "@navora/extension": ["apps/extension/src"],
+      "@navora/claude-plugin": ["apps/claude-plugin/src"]
     }
   },
   "exclude": ["node_modules", "dist", ".turbo"]
