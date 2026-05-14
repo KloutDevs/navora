@@ -4,9 +4,9 @@ export default defineConfig({
   srcDir: 'src',
   outDir: 'dist',
   manifest: {
-    name: 'AI Browser Runtime',
-    description: 'AI-powered browser automation extension',
-    version: '0.1.0',
+    name: 'Navora',
+    description: 'AI browser automation runtime — Navora',
+    version: '0.2.0',
     permissions: [
       'activeTab',
       'scripting',
