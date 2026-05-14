@@ -124,9 +124,9 @@ export class WebSocketHub extends EventEmitter {
         const timestamp = parseInt(timestampStr, 10);
         const signature = parts.slice(2).join(":");
 
-        // Check timestamp is recent (within 24 hours)
+        // Check timestamp is recent (within 30 days — allows pre-generated shim tokens)
         const age = Date.now() - timestamp;
-        if (age > 24 * 60 * 60 * 1000) {
+        if (age > 30 * 24 * 60 * 60 * 1000) {
           return { valid: false, profileId: "", error: "Token expired" };
         }
 

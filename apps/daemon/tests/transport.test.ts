@@ -555,9 +555,9 @@ describe("generateToken", () => {
     await hub.whenListening();
     const addr = hub.getAddress()!;
 
-    // Build a token with a timestamp 25 hours in the past
+    // Build a token with a timestamp 31 days in the past (beyond the 30-day window)
     const { createHmac } = await import("node:crypto");
-    const timestamp = Date.now() - 25 * 60 * 60 * 1000;
+    const timestamp = Date.now() - 31 * 24 * 60 * 60 * 1000;
     const sig = createHmac("sha256", SECRET).update(`${PROFILE}:${timestamp}`).digest("hex");
     const token = Buffer.from(`${PROFILE}:${timestamp}:${sig}`).toString("base64");
 
