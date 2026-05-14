@@ -3,6 +3,7 @@
  * Handles browser detection, shim wrapper creation and NM host registration.
  */
 
+import { createHmac } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -207,19 +208,50 @@ export function createShimWrapper(shimCliPath: string): string {
   const dir = shimWrapperDir();
   mkdirSync(dir, { recursive: true });
 
+  // Generate a long-lived token for the shim (valid 30 days, matches daemon expiry)
+  const authSecret = process.env['NAVORA_AUTH_SECRET'] ?? 'dev-secret-change-in-production';
+  const daemonPort = process.env['NAVORA_DAEMON_PORT'] ?? '51520';
+  const daemonHost = process.env['NAVORA_DAEMON_HOST'] ?? '127.0.0.1';
+  const profileId = 'default';
+  const timestamp = Date.now();
+  const sig = createHmac('sha256', authSecret).update(`${profileId}:${timestamp}`).digest('hex');
+  const token = Buffer.from(`${profileId}:${timestamp}:${sig}`).toString('base64');
+
   const os = platform();
+  // Full path to node — Chrome launches the host with a minimal PATH,
+  // so 'node' alone would not be found.
+  const nodeBin = process.execPath;
+
   if (os === 'win32') {
     const bat = join(dir, 'navora-shim.bat');
     writeFileSync(
       bat,
-      `@echo off\r\nnode "${shimCliPath}" %*\r\n`,
+      [
+        '@echo off',
+        `set NAVORA_RUNTIME_TOKEN=${token}`,
+        `set NAVORA_RUNTIME_HOST=${daemonHost}`,
+        `set NAVORA_RUNTIME_PORT=${daemonPort}`,
+        `set NAVORA_RUNTIME_DAEMON_PATH=${shimCliPath.replace('nm-shim-cli.js', 'main.js')}`,
+        `"${nodeBin}" "${shimCliPath}"`,
+      ].join('\r\n') + '\r\n',
       'utf8'
     );
     return bat;
   }
 
   const sh = join(dir, 'navora-shim.sh');
-  writeFileSync(sh, `#!/bin/sh\nexec node "${shimCliPath}" "$@"\n`, 'utf8');
+  writeFileSync(
+    sh,
+    [
+      '#!/bin/sh',
+      `export NAVORA_RUNTIME_TOKEN="${token}"`,
+      `export NAVORA_RUNTIME_HOST="${daemonHost}"`,
+      `export NAVORA_RUNTIME_PORT="${daemonPort}"`,
+      `export NAVORA_RUNTIME_DAEMON_PATH="${shimCliPath.replace('nm-shim-cli.js', 'main.js')}"`,
+      `exec "${nodeBin}" "${shimCliPath}" "$@"`,
+    ].join('\n') + '\n',
+    'utf8'
+  );
   chmodSync(sh, 0o755);
   return sh;
 }

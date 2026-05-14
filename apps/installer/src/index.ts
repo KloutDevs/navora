@@ -517,7 +517,7 @@ async function extensionSubmenu(): Promise<void> {
             ? `  Extension ID: ${extensionId}`
             : `  ⚠ Sin extension ID — la extensión no podrá conectar hasta que lo agregues.`,
           ``,
-          `Reiniciá ${browser.label} para que tome el cambio.`,
+          `Recargá la extensión en ${browser.extensionsUrl} → botón reload (no hace falta reiniciar el browser).`,
         ].join('\n'),
         extensionId ? 'Registrado ✓' : 'Registrado (incompleto)'
       );
