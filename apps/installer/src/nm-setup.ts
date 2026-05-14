@@ -66,9 +66,9 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
     const pf = process.env['PROGRAMFILES'] ?? 'C:\\Program Files';
     const pf86 = process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)';
 
-    return [
+    return ([
       {
-        id: 'chrome',
+        id: 'chrome' as const,
         label: 'Google Chrome',
         installed: isInstalledWin([
           join(pf, 'Google\\Chrome\\Application\\chrome.exe'),
@@ -79,7 +79,7 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         extensionsUrl: 'chrome://extensions',
       },
       {
-        id: 'brave',
+        id: 'brave' as const,
         label: 'Brave Browser',
         installed: isInstalledWin([
           join(pf, 'BraveSoftware\\Brave-Browser\\Application\\brave.exe'),
@@ -90,7 +90,7 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         extensionsUrl: 'brave://extensions',
       },
       {
-        id: 'edge',
+        id: 'edge' as const,
         label: 'Microsoft Edge',
         installed: isInstalledWin([
           join(pf, 'Microsoft\\Edge\\Application\\msedge.exe'),
@@ -100,46 +100,46 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         registrySubkey: 'Microsoft\\Edge\\NativeMessagingHosts',
         extensionsUrl: 'edge://extensions',
       },
-    ].filter((b) => b.installed);
+    ] satisfies NmBrowserProfile[]).filter((b) => b.installed);
   }
 
   if (os === 'linux') {
-    return [
+    return ([
       {
-        id: 'chrome',
+        id: 'chrome' as const,
         label: 'Google Chrome',
         installed: isInstalledUnix(['google-chrome', 'google-chrome-stable']),
         nmConfigDir: '~/.config/google-chrome/NativeMessagingHosts',
         extensionsUrl: 'chrome://extensions',
       },
       {
-        id: 'brave',
+        id: 'brave' as const,
         label: 'Brave Browser',
         installed: isInstalledUnix(['brave-browser', 'brave']),
         nmConfigDir: '~/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts',
         extensionsUrl: 'brave://extensions',
       },
       {
-        id: 'edge',
+        id: 'edge' as const,
         label: 'Microsoft Edge',
         installed: isInstalledUnix(['microsoft-edge', 'microsoft-edge-stable']),
         nmConfigDir: '~/.config/microsoft-edge/NativeMessagingHosts',
         extensionsUrl: 'edge://extensions',
       },
       {
-        id: 'chromium',
+        id: 'chromium' as const,
         label: 'Chromium',
         installed: isInstalledUnix(['chromium', 'chromium-browser']),
         nmConfigDir: '~/.config/chromium/NativeMessagingHosts',
         extensionsUrl: 'chrome://extensions',
       },
-    ].filter((b) => b.installed);
+    ] satisfies NmBrowserProfile[]).filter((b) => b.installed);
   }
 
   if (os === 'darwin') {
-    return [
+    return ([
       {
-        id: 'chrome',
+        id: 'chrome' as const,
         label: 'Google Chrome',
         installed: isInstalledMac(['/Applications/Google Chrome.app']),
         nmConfigDir:
@@ -147,7 +147,7 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         extensionsUrl: 'chrome://extensions',
       },
       {
-        id: 'brave',
+        id: 'brave' as const,
         label: 'Brave Browser',
         installed: isInstalledMac(['/Applications/Brave Browser.app']),
         nmConfigDir:
@@ -155,7 +155,7 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         extensionsUrl: 'brave://extensions',
       },
       {
-        id: 'edge',
+        id: 'edge' as const,
         label: 'Microsoft Edge',
         installed: isInstalledMac(['/Applications/Microsoft Edge.app']),
         nmConfigDir:
@@ -163,14 +163,14 @@ export function detectNmBrowsers(): NmBrowserProfile[] {
         extensionsUrl: 'edge://extensions',
       },
       {
-        id: 'chromium',
+        id: 'chromium' as const,
         label: 'Chromium',
         installed: isInstalledMac(['/Applications/Chromium.app']),
         nmConfigDir:
           '~/Library/Application Support/Chromium/NativeMessagingHosts',
         extensionsUrl: 'chrome://extensions',
       },
-    ].filter((b) => b.installed);
+    ] satisfies NmBrowserProfile[]).filter((b) => b.installed);
   }
 
   return [];
