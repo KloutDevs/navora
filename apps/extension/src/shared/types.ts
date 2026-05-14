@@ -36,15 +36,6 @@ export interface DomainAllowlist {
   enabled: boolean;
 }
 
-export interface ActivityLogEntry {
-  id: string;
-  timestamp: number;
-  type: 'action' | 'permission' | 'error' | 'info';
-  action: string;
-  details?: string;
-  domain?: string;
-}
-
 export interface ConfirmationRequest {
   id: string;
   action: string;
@@ -56,7 +47,6 @@ export interface ConfirmationRequest {
 export interface ExtensionState {
   connectionStatus: ConnectionStatus;
   allowlist: DomainAllowlist;
-  activityLog: ActivityLogEntry[];
   pendingConfirmation: ConfirmationRequest | null;
 }
 
@@ -64,6 +54,7 @@ export interface ExtensionState {
 export type BackgroundMessage =
   | { type: 'EXECUTE_TOOL'; payload: NMRequest }
   | { type: 'GET_STATE' }
+  | { type: 'CLEAR_ACTIVITY_LOG' }
   | { type: 'UPDATE_ALLOWLIST'; payload: DomainAllowlist }
   | { type: 'CONFIRM_ACTION'; payload: { id: string; approved: boolean } }
   | { type: 'CONNECTION_STATUS'; payload: ConnectionStatus };

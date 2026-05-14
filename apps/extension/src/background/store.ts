@@ -3,13 +3,11 @@
  */
 
 import { create as createZustandStore } from 'zustand';
-import type { ExtensionState, ConnectionStatus, DomainAllowlist, ActivityLogEntry } from '../shared/types';
+import type { ExtensionState, ConnectionStatus, DomainAllowlist } from '../shared/types';
 
 interface ExtensionStore {
   setConnectionStatus: (status: ConnectionStatus) => void;
   setAllowlist: (allowlist: DomainAllowlist) => void;
-  addActivityLog: (entry: Omit<ActivityLogEntry, 'id' | 'timestamp'>) => void;
-  clearActivityLog: () => void;
   setPendingConfirmation: (confirmation: ExtensionState['pendingConfirmation']) => void;
   getState: () => ExtensionState;
   subscribe: (callback: (state: ExtensionState) => void) => () => void;
@@ -20,7 +18,6 @@ export function createExtensionStore(): ExtensionStore {
   let state: ExtensionState = {
     connectionStatus: { connected: false },
     allowlist: { domains: [], enabled: false },
-    activityLog: [],
     pendingConfirmation: null
   };
 
@@ -42,24 +39,6 @@ export function createExtensionStore(): ExtensionStore {
     },
     setAllowlist: (allowlist) => {
       state = { ...state, allowlist };
-      notify();
-    },
-    addActivityLog: (entry) => {
-      state = {
-        ...state,
-        activityLog: [
-          ...state.activityLog,
-          {
-            ...entry,
-            id: `log_${Date.now()}`,
-            timestamp: Date.now()
-          }
-        ].slice(-100)
-      };
-      notify();
-    },
-    clearActivityLog: () => {
-      state = { ...state, activityLog: [] };
       notify();
     },
     setPendingConfirmation: (confirmation) => {

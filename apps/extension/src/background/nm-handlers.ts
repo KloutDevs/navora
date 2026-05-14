@@ -2,6 +2,7 @@
  * NM RPC handlers — one per NMMethod string (matches packages/browser-tools nm-types).
  */
 
+import { addEntry, extractProfile, formatClientLabel } from "./activity-log";
 import { resolveTabId, navigateAndWait } from "./tab-resolver";
 
 export type NmHandler = (params: Record<string, unknown>) => Promise<unknown>;
@@ -37,6 +38,38 @@ async function tabInfoFromChrome(tab: chrome.tabs.Tab) {
 }
 
 export const nmHandlers: Record<string, NmHandler> = {
+  /**
+   * Optional: daemon puede notificar conexión/desconexión de clientes MCP.
+   * Params: `{ event: 'connect' | 'disconnect', mcpClient?: string, profileId?: string }`
+   */
+  async "mcp/session"(params) {
+    const event = String(params["event"] ?? "");
+    const raw =
+      (typeof params["mcpClient"] === "string" && params["mcpClient"]) ||
+      (typeof params["client"] === "string" && params["client"]) ||
+      "otro";
+    const client = formatClientLabel(String(raw));
+    const profile = extractProfile(params);
+    if (event === "connect") {
+      addEntry({
+        type: "connect",
+        client,
+        profile,
+        summary: "Cliente MCP enlazado al daemon",
+        status: "ok",
+      });
+    } else if (event === "disconnect") {
+      addEntry({
+        type: "disconnect",
+        client,
+        profile,
+        summary: "Cliente MCP desenlazado del daemon",
+        status: "ok",
+      });
+    }
+    return { ok: true as const };
+  },
+
   async ping() {
     return { ok: true as const };
   },

@@ -1,5 +1,7 @@
 import type { NMEnvelope } from "@navora/protocol";
 import { NMEnvelopeSchema } from "@navora/protocol";
+import type { ConnectionStatus } from "../shared/types";
+import { addEntry } from "./activity-log";
 import { dispatchDaemonNmMessage } from "./index";
 
 function newRequestId(): string {
@@ -11,13 +13,6 @@ const REQUEST_TIMEOUT_MS = 8000;
 const RECONNECT_DELAY_MS = 5000;
 
 type StatusCallback = (status: ConnectionStatus) => void;
-
-export interface ConnectionStatus {
-  connected: boolean;
-  daemonVersion?: string;
-  lastConnected?: number;
-  error?: string;
-}
 
 class NMClientImpl {
   private port: chrome.runtime.Port | null = null;
@@ -54,11 +49,24 @@ class NMClientImpl {
       this.port.onDisconnect.addListener(() => this.onDisconnect());
       this.connecting = false;
       this.updateStatus({ connected: true, daemonVersion: "0.1.0", lastConnected: Date.now() });
+      addEntry({
+        type: "connect",
+        client: "Native Messaging",
+        summary: "Canal con el daemon abierto (Chrome ↔ NM host / shim).",
+        status: "ok",
+      });
     } catch (err) {
       this.connecting = false;
+      const msg = err instanceof Error ? err.message : "Connect failed";
       this.updateStatus({
         connected: false,
-        error: err instanceof Error ? err.message : "Connect failed",
+        error: msg,
+      });
+      addEntry({
+        type: "error",
+        client: "Native Messaging",
+        summary: `No se pudo conectar al host NM: ${msg}`,
+        status: "error",
       });
     }
   }
@@ -66,6 +74,11 @@ class NMClientImpl {
   private onMessage(msg: unknown): void {
     const parsed = NMEnvelopeSchema.safeParse(msg);
     if (!parsed.success) {
+      addEntry({
+        type: "error",
+        summary: "Mensaje NM inválido o corrupto (no coincide con el esquema del protocolo).",
+        status: "error",
+      });
       return;
     }
 
@@ -102,6 +115,12 @@ class NMClientImpl {
       p.reject(new Error("NM disconnected"));
     }
     this.pendingRequests.clear();
+    addEntry({
+      type: "disconnect",
+      client: "Native Messaging",
+      summary: `Canal NM cerrado (${errorMsg}). Reintento automático en breve si el shim sigue activo.`,
+      status: "ok",
+    });
     this.updateStatus({ connected: false, error: errorMsg });
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.connect(), RECONNECT_DELAY_MS);

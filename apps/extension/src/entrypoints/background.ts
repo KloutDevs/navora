@@ -1,4 +1,5 @@
 import { defineBackground } from 'wxt/sandbox';
+import { addEntry, extractProfile, initActivityLog, summarizeToolParams, clearLog } from '../background/activity-log';
 import { getNMClient } from '../background/nm-client';
 import { createExtensionStore } from '../background/store';
 import type { ConnectionStatus, DomainAllowlist, ExtensionState } from '../shared/types';
@@ -23,7 +24,9 @@ export default defineBackground(() => {
   const nmClient = getNMClient();
   const store = createExtensionStore();
 
-  nmClient.connect();
+  void initActivityLog().then(() => {
+    nmClient.connect();
+  });
 
   // Open sidepanel on toolbar icon click (Chrome 116+)
   if (typeof chrome.sidePanel?.setPanelBehavior === 'function') {
@@ -97,6 +100,11 @@ export default defineBackground(() => {
         sendResponse(store.getState());
         return;
 
+      case 'CLEAR_ACTIVITY_LOG':
+        clearLog();
+        sendResponse({ success: true });
+        return;
+
       case 'UPDATE_ALLOWLIST':
         store.setAllowlist(message.payload as DomainAllowlist);
         sendResponse({ success: true });
@@ -106,12 +114,14 @@ export default defineBackground(() => {
         const { id, approved } = message.payload as { id: string; approved: boolean };
         const s = store.getState();
         if (s.pendingConfirmation?.id === id) {
-          store.addActivityLog({
-            type: 'permission',
-            action: approved
-              ? `approved_${s.pendingConfirmation.action}`
-              : `denied_${s.pendingConfirmation.action}`,
-            domain: s.pendingConfirmation.domain,
+          const pc = s.pendingConfirmation;
+          addEntry({
+            type: 'tool_call',
+            tool: 'permission',
+            summary: approved
+              ? `Permiso aprobado: ${pc.action} · ${pc.domain}`
+              : `Permiso denegado: ${pc.action} · ${pc.domain}`,
+            status: approved ? 'ok' : 'error',
           });
           store.setPendingConfirmation(null);
         }
@@ -124,23 +134,29 @@ export default defineBackground(() => {
         const params = req.params ?? {};
         const senderTabId = sender.tab?.id;
         const senderTabUrl = sender.tab?.url;
+        const t0 = Date.now();
         try {
           const result = await dispatchTool(req.method, params, senderTabId, senderTabUrl);
-          const actionDomain = senderTabUrl ? tryHostname(senderTabUrl) : undefined;
-          store.addActivityLog({
-            type: 'action',
-            action: req.method,
-            ...(actionDomain !== undefined ? { domain: actionDomain } : {}),
+          addEntry({
+            type: 'tool_call',
+            tool: req.method,
+            client: 'Pestaña (content)',
+            profile: extractProfile(params),
+            summary: summarizeToolParams(req.method, params),
+            status: 'ok',
+            durationMs: Date.now() - t0,
           });
           sendResponse({ success: true, result });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
-          const errorDomain = senderTabUrl ? tryHostname(senderTabUrl) : undefined;
-          store.addActivityLog({
-            type: 'error',
-            action: req.method,
-            details: errMsg,
-            ...(errorDomain !== undefined ? { domain: errorDomain } : {}),
+          addEntry({
+            type: 'tool_call',
+            tool: req.method,
+            client: 'Pestaña (content)',
+            profile: extractProfile(params),
+            summary: `${summarizeToolParams(req.method, params)} → ${errMsg}`,
+            status: 'error',
+            durationMs: Date.now() - t0,
           });
           sendResponse({ success: false, error: { message: errMsg } });
         }
@@ -164,6 +180,12 @@ export default defineBackground(() => {
         const hostname = tryHostname(targetUrl);
         const { allowlist } = store.getState();
         if (allowlist.enabled && hostname && !allowlist.domains.includes(hostname)) {
+          addEntry({
+            type: 'error',
+            tool: method,
+            summary: `Dominio no permitido por la lista: ${hostname}`,
+            status: 'error',
+          });
           throw new Error(`DOMAIN_NOT_ALLOWED: ${hostname}`);
         }
       }

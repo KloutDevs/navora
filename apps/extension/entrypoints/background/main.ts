@@ -2,6 +2,7 @@
  * Background Service Worker Entry Point
  */
 
+import { initActivityLog, addEntry, summarizeToolParams, extractProfile, clearLog } from '../../src/background/activity-log';
 import { getNMClient } from '../../src/background/nm-client';
 import { createExtensionStore } from '../../src/background/store';
 import type { ConnectionStatus, DomainAllowlist } from '../../src/shared/types';
@@ -9,6 +10,10 @@ import type { ConnectionStatus, DomainAllowlist } from '../../src/shared/types';
 export default defineBackground(() => {
   const nmClient = getNMClient();
   const store = createExtensionStore();
+
+  void initActivityLog().then(() => {
+    nmClient.connect();
+  });
 
   // Connection status listener
   nmClient.onStatusChange((status: ConnectionStatus) => {
@@ -50,6 +55,10 @@ export default defineBackground(() => {
       case 'GET_STATE':
         sendResponse(store.getState());
         break;
+      case 'CLEAR_ACTIVITY_LOG':
+        clearLog();
+        sendResponse({ success: true });
+        break;
       case 'UPDATE_ALLOWLIST':
         store.setAllowlist(message.payload as DomainAllowlist);
         sendResponse({ success: true });
@@ -58,10 +67,14 @@ export default defineBackground(() => {
         const payload = message.payload as { id: string; approved: boolean };
         const state = store.getState();
         if (state.pendingConfirmation?.id === payload.id) {
-          store.addActivityLog({
-            type: 'permission',
-            action: payload.approved ? `approved_${state.pendingConfirmation.action}` : `denied_${state.pendingConfirmation.action}`,
-            domain: state.pendingConfirmation.domain
+          const pc = state.pendingConfirmation;
+          addEntry({
+            type: 'tool_call',
+            tool: 'permission',
+            summary: payload.approved
+              ? `Permiso aprobado: ${pc.action} · ${pc.domain}`
+              : `Permiso denegado: ${pc.action} · ${pc.domain}`,
+            status: payload.approved ? 'ok' : 'error',
           });
           store.setPendingConfirmation(null);
         }
@@ -82,29 +95,47 @@ export default defineBackground(() => {
   ): Promise<unknown> {
     const { method, params } = request;
     const tab = sender.tab;
+    const t0 = Date.now();
 
     if (tab?.url) {
       const url = new URL(tab.url);
       const allowlist = store.getState().allowlist;
       if (allowlist.enabled && !allowlist.domains.includes(url.hostname)) {
+        addEntry({
+          type: 'error',
+          tool: method,
+          client: 'Pestaña',
+          profile: extractProfile(params),
+          summary: `Dominio no permitido por la lista: ${url.hostname}`,
+          status: 'error',
+          durationMs: Date.now() - t0,
+        });
         return { success: false, error: { code: 'DOMAIN_NOT_ALLOWED', message: `Domain ${url.hostname} not allowed` } };
       }
     }
 
     try {
       const result = await nmClient.executeTool(method, params);
-      store.addActivityLog({
-        type: 'action',
-        action: method,
-        domain: tab?.url ? new URL(tab.url).hostname : undefined
+      addEntry({
+        type: 'tool_call',
+        tool: method,
+        client: 'Pestaña (content)',
+        profile: extractProfile(params),
+        summary: summarizeToolParams(method, params ?? {}),
+        status: 'ok',
+        durationMs: Date.now() - t0,
       });
       return result;
     } catch (error) {
-      store.addActivityLog({
-        type: 'error',
-        action: method,
-        details: error instanceof Error ? error.message : 'Unknown error',
-        domain: tab?.url ? new URL(tab.url).hostname : undefined
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      addEntry({
+        type: 'tool_call',
+        tool: method,
+        client: 'Pestaña (content)',
+        profile: extractProfile(params),
+        summary: `${summarizeToolParams(method, params ?? {})} → ${msg}`,
+        status: 'error',
+        durationMs: Date.now() - t0,
       });
       throw error;
     }
