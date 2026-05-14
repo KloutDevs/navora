@@ -4,12 +4,13 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { PopupApp } from '../../sidepanel/index';
+import { SidepanelApp } from '../../src/sidepanel/App';
+import '../../src/sidepanel/styles.css';
 
 export default definePopup(() => {
   const container = document.getElementById('root');
   if (container) {
     const root = createRoot(container);
-    root.render(<PopupApp />);
+    root.render(<SidepanelApp />);
   }
 });
