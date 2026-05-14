@@ -9,26 +9,43 @@ A proxy has none of those. This roadmap is built around that moat.
 - 13 core browser tools + 3 raw CDP tools
 - Daemon WebSocket hub with per-tab CDP connection pool
 - Multi-tab routing via sequential tab IDs
-- Chrome extension with Native Messaging bridge (built, not primary path)
+- Chrome extension (Navora, v0.2.0) with Native Messaging bridge and real-time activity log sidepanel
 - SQLite persistence, permission gate, rate limiter — wired in dispatcher, not activated
+- Interactive installer TUI: guided NM host setup, daemon service management, pre-generated 30-day auth tokens
+- Published on npm: `navora-claude-plugin`, `navora-cursor-plugin`, `navora-daemon`
 
 The foundation is solid. The tool surface is thin. That changes in v0.3.
 
 ---
 
-## v0.2.x — Testing foundation (done)
+## v0.2.x — Foundation complete ✓
 
-Before expanding the tool surface, the codebase needed a test baseline it could grow on safely.
-
-**Completed:**
+**Testing & quality**
 - Coverage configured (`@vitest/coverage-v8`): anti-regression thresholds at 63/63/72/70, watermarks at 80% target
 - Fixed `vitest.workspace.ts` path bug that silently broke coverage collection
-- Added test suites for `apps/installer` (`cursor-config`, `probes`, `format-installer-summary`) and `apps/claude-plugin`
+- Added test suites for `apps/installer`, `apps/claude-plugin`, `apps/daemon` (transport, dispatcher, permissions)
 - Fixed 2 failing tests: `ulid` monotonic (flaky timing) and `nm-shim` lockfile (missing env isolation)
-- Fixed installer bug: Cursor MCP was being configured with `navora-claude-plugin` instead of `navora-cursor-plugin`
-- Updated README: install commands now use `navora` as the canonical MCP key
 - WebSocket token auth: replaced reversed-string signature with `HMAC-SHA256`; added `generateToken()` utility
-- Extracted `PERSISTENCE_ONLY_TOOLS` constant — eliminates the triplicated `skipAdapter` list across `pipeline.ts` and `lifecycle/index.ts`
+- Extracted `PERSISTENCE_ONLY_TOOLS` constant — eliminates the triplicated `skipAdapter` list
+- CI workflow (GitHub Actions)
+
+**Installer**
+- Interactive TUI (`@clack/prompts`) for MCP plugin install, daemon service management, and NM host setup
+- Browser detection (Chrome, Brave, Edge, Chromium) on Windows, macOS, Linux
+- Pre-generated 30-day HMAC shim token so the shim connects to the daemon without any extra auth step
+- Shim wrapper resolves the full `node` binary path (Chrome uses a minimal `PATH`)
+
+**Extension**
+- Activity log module: circular buffer (500 entries) persisted in `chrome.storage.local`, survives service worker restarts
+- Every tool call, NM connect/disconnect, and error recorded with client name, profile, duration, and human-readable summary
+- Sidepanel rework: live activity feed replaces the old static log
+- `mcp/session` NM handler: daemon notifies the extension on MCP client connect/disconnect
+- Renamed to **Navora** in the manifest, bumped to `0.2.0`
+
+**npm**
+- `navora-daemon` published as a flat tsup bundle; plugins auto-discover it via `npx navora-daemon`
+- `navora-claude-plugin` and `navora-cursor-plugin` published at `0.2.0`
+- All packages renamed from `@ai-browser-runtime/*` → `@navora/*`
 
 ---
 
