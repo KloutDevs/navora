@@ -4,17 +4,19 @@ Navora is a browser automation **runtime** for AI agents — not a thin proxy.
 The distinction matters: a runtime has state, identity, memory, and policy.
 A proxy has none of those. This roadmap is built around that moat.
 
-## Where we are today (v0.2)
+## Where we are today (v0.3)
 
-- 13 core browser tools + 3 raw CDP tools
+- 13 core browser tools + 3 raw CDP tools (`browser_wait_for` now accepts text content matching)
 - Daemon WebSocket hub with per-tab CDP connection pool
 - Multi-tab routing via sequential tab IDs
 - Chrome extension (Navora, v0.2.0) with Native Messaging bridge and real-time activity log sidepanel
 - SQLite persistence, permission gate, rate limiter — wired in dispatcher, not activated
 - Interactive installer TUI: guided NM host setup, daemon service management, pre-generated 30-day auth tokens
 - Published on npm: `navora-claude-plugin`, `navora-cursor-plugin`, `navora-daemon`
+- Retry logic in `CommandExecutor` for transient CDP disconnects (`-1`, `-2`, `-3`, `-32000`)
+- Structured `CDPError` with typed codes, `isCDPError` guard, and HTTP-style status mapping in the pipeline
 
-The foundation is solid. The tool surface is thin. That changes in v0.3.
+The stability layer is solid. The tool surface is still thin. That changes next.
 
 ---
 
@@ -46,6 +48,22 @@ The foundation is solid. The tool surface is thin. That changes in v0.3.
 - `navora-daemon` published as a flat tsup bundle; plugins auto-discover it via `npx navora-daemon`
 - `navora-claude-plugin` and `navora-cursor-plugin` published at `0.2.0`
 - All packages renamed from `@ai-browser-runtime/*` → `@navora/*`
+
+---
+
+## v0.3.x — Stability complete ✓
+
+**Retry logic**
+- `CommandExecutor.withRetry`: 2 attempts, `[200, 400]` ms backoff, only on transient CDP codes (`-1`, `-2`, `-3`, `-32000`)
+- `waitForSelector` and `waitForText` use `pollUntil` — intentionally excluded from `withRetry`
+
+**Structured error codes**
+- `CDPError` with typed `code` + `method` fields; `isCDPError` type guard; `createCDPErrorMapper` factory
+- HTTP-style status mapping in the pipeline: 503 (unavailable), 504 (timeout), 404 (not found), 400 (bad params), 500 (default)
+
+**`browser_wait_for` text support**
+- Accepts `{ text }` in addition to `{ selector }` — polls `document.body.innerText` with optional `caseSensitive` flag
+- Propagated through all adapters (`DirectCDPAdapter`, `NMAdapter`, `FakeAdapter`) and the extension NM handler
 
 ---
 
@@ -81,12 +99,6 @@ Network capture is activated per-tab via `Network.enable` — no overhead on tab
 | `browser_get_accessibility_tree` | Serialized AX tree via `Accessibility.getFullAXTree` |
 | `browser_set_viewport` | Resize viewport (width, height, device scale factor) |
 | `browser_emulate_device` | Apply a named device preset (mobile, tablet, etc.) |
-
-### Stability
-
-- Retry logic in `CommandExecutor` for transient CDP disconnects
-- Structured error codes in all tool responses (not bare strings)
-- `browser_wait_for` extended to support text content matching, not just selectors
 
 ---
 

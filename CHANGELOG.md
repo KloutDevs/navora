@@ -11,6 +11,41 @@ _Next focus: v0.3 tool parity — hover, drag, form fill, network capture, acces
 
 ---
 
+## [0.3.0] — 2026-05-19
+
+### Added
+
+**Browser tools — retry logic**
+- `CommandExecutor.withRetry` — 2 attempts with `[200, 400]` ms backoff on transient CDP errors (codes `-1`, `-2`, `-3`, `-32000`). 10 action methods wrapped; `waitForSelector` and `waitForText` intentionally excluded (they use `pollUntil`).
+- `isTransientCDPError(e)` — predicate used by `withRetry` to distinguish retriable from non-retriable failures.
+
+**Browser tools — structured error codes**
+- `CDPError` class with typed `code` and `method` fields, replacing bare `Error` objects across the CDP layer.
+- `isCDPError(e)` type guard exported from `@navora/browser-tools`.
+- `createCDPErrorMapper()` — converts `DevToolsProtocolError`, duck-typed objects, WebSocket errors, and unknowns into `CDPError`. Uses `instanceof DevToolsProtocolError` before duck-type fallback.
+
+**Browser tools — `waitForText`**
+- `CommandExecutor.waitForText(text, options?, tabId?)` → `Result<void, Error>`. Polls `document.body.innerText` via `Runtime.evaluate`; `caseSensitive` defaults to `false`.
+- Propagated through `BrowserAdapter`, `DirectCDPAdapter`, `FakeAdapter`, and `NMAdapter`.
+
+**Daemon — `browser_wait_for` text routing**
+- `browser_wait_for` now accepts `{ text }` in addition to `{ selector }`. Empty params return a 400 validation error.
+- `resolveErrorCode(e)` — maps CDPError codes to HTTP-style status codes: `-1`/`-3`/`-32000` → 503, `-2` → 504, "not found" messages → 404, default → 500.
+
+**Extension — `wait_for` NM handler**
+- `nm-handlers.ts`: `wait_for` handler routes `text` and `selector` via `document.body.innerText` polling and `document.querySelector` polling respectively, both injected into the MAIN world.
+
+### Fixed
+- `createDefaultLogger()` in `pipeline.ts` used `console.warn`/`console.error` as fallbacks. Now fully no-op — callers must inject a real logger.
+
+### Testing
+- `packages/browser-tools/tests/executor-retry.test.ts` — 4 cases: retry on transient, exhaustion, no-retry on non-transient, `waitForSelector` isolation.
+- `packages/browser-tools/tests/executor-wait-for-text.test.ts` — 5 cases: first-poll match, N-poll match, timeout, case-insensitive, case-sensitive.
+- `apps/daemon/tests/dispatcher-error-codes.test.ts` — `resolveErrorCode` for all CDP codes and generic errors.
+- `apps/daemon/tests/dispatcher-browser-wait-for.test.ts` — text/selector routing, empty-params 400, `caseSensitive` forwarding.
+
+---
+
 ## [0.2.0] — 2026-05-13
 
 ### Added
