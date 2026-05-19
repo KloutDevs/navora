@@ -149,11 +149,43 @@ export const nmHandlers: Record<string, NmHandler> = {
   },
 
   async wait_for(params) {
-    const selector = params["selector"] as string;
+    const selector = params["selector"] as string | undefined;
+    const text = params["text"] as string | undefined;
     const timeout = (params["timeout"] as number) ?? 10000;
+    const caseSensitive = (params["caseSensitive"] as boolean) ?? false;
     const tabId = await resolveTabId(params["tabId"] as number | undefined);
     const start = Date.now();
-    const ok = await injectMain(
+
+    if (text !== undefined && text !== "") {
+      const okText = await injectMain(
+        tabId,
+        (...args: unknown[]) => {
+          const [needle, ms, cs] = args as [string, number, boolean];
+          const deadline = Date.now() + ms;
+          while (Date.now() < deadline) {
+            const body = document.body?.innerText ?? "";
+            const found = cs
+              ? body.includes(needle)
+              : body.toLowerCase().includes(needle.toLowerCase());
+            if (found) return true;
+          }
+          return false;
+        },
+        [text, timeout, caseSensitive]
+      );
+      return {
+        success: okText,
+        durationMs: Date.now() - start,
+        tabId,
+        error: okText ? undefined : `Timeout waiting for text: ${text}`,
+      };
+    }
+
+    if (!selector) {
+      throw new Error("Missing required param: selector or text");
+    }
+
+    const okSel = await injectMain(
       tabId,
       (...args: unknown[]) => {
         const [sel, ms] = args as [string, number];
@@ -166,10 +198,10 @@ export const nmHandlers: Record<string, NmHandler> = {
       [selector, timeout]
     );
     return {
-      success: ok,
+      success: okSel,
       durationMs: Date.now() - start,
       tabId,
-      error: ok ? undefined : `Timeout waiting for ${selector}`,
+      error: okSel ? undefined : `Timeout waiting for ${selector}`,
     };
   },
 

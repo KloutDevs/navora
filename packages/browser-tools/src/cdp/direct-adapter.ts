@@ -17,7 +17,7 @@ import type {
   CookieInfo,
 } from '../adapter';
 import type { Result } from '@navora/shared';
-import { ok, err } from '@navora/shared';
+import { ok, err, isError } from '@navora/shared';
 import { DevToolsProtocol } from './client';
 import { TabManager } from './tab-manager';
 import { CommandExecutor } from './executor';
@@ -169,6 +169,22 @@ export class DirectCDPAdapter implements BrowserAdapter {
 
   async waitForSelector(selector: string, timeout?: number, tabId?: number): Promise<Result<ToolResult, Error>> {
     return this.withTab(tabId, (ex) => ex.waitForSelector(selector, timeout));
+  }
+
+  async waitForText(
+    text: string,
+    options?: { timeout?: number; caseSensitive?: boolean },
+    tabId?: number
+  ): Promise<Result<ToolResult, Error>> {
+    return this.withTab(tabId, async (ex, resolved) => {
+      const r = await ex.waitForText(text, options, resolved);
+      if (isError(r)) return err(r.error);
+      return ok({
+        success: true,
+        durationMs: 0,
+        tabId: resolved,
+      });
+    });
   }
 
   async clickElement(selector: string, tabId?: number): Promise<Result<ToolResult, Error>> {

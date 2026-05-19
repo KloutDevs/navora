@@ -89,10 +89,26 @@ async function dispatchAdapterTool(
       return r.value;
     }
     case "browser_wait_for": {
-      const selector = params["selector"] as string;
-      if (!selector) throw new Error("Missing selector");
+      const selector = params["selector"] as string | undefined;
+      const text = params["text"] as string | undefined;
       const timeout = params["timeout"] as number | undefined;
-      const r = await adapter!.waitForSelector(selector, timeout, tabId);
+      if (!selector && !text) {
+        throw new Error("Missing required param: selector or text");
+      }
+      if (text) {
+        const caseSensitive = params["caseSensitive"] as boolean | undefined;
+        const waitOpts: { timeout?: number; caseSensitive?: boolean } = {};
+        if (timeout !== undefined) waitOpts.timeout = timeout;
+        if (caseSensitive !== undefined) waitOpts.caseSensitive = caseSensitive;
+        const r = await adapter!.waitForText(
+          text,
+          Object.keys(waitOpts).length > 0 ? waitOpts : undefined,
+          tabId
+        );
+        if (!isOk(r)) throw r.error;
+        return r.value;
+      }
+      const r = await adapter!.waitForSelector(selector!, timeout, tabId);
       if (!isOk(r)) throw r.error;
       return r.value;
     }

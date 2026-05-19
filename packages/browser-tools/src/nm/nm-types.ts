@@ -40,7 +40,12 @@ export type NMParamMap = {
   reload: BaseParams & Record<string, never>;
   get_dom: BaseParams & Record<string, never>;
   get_text: BaseParams & Record<string, never>;
-  wait_for: BaseParams & { selector: string; timeout?: number };
+  wait_for: BaseParams & {
+    selector?: string;
+    text?: string;
+    timeout?: number;
+    caseSensitive?: boolean;
+  };
   click: BaseParams & { selector: string };
   type: BaseParams & { text: string; selector?: string };
   scroll: BaseParams & { selector?: string; deltaY?: number };

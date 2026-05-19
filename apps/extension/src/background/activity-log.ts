@@ -202,6 +202,10 @@ export function summarizeToolParams(method: string, params: Record<string, unkno
     case "get_text":
       return `get_text${tail}`;
     case "wait_for": {
+      if (typeof params["text"] === "string" && params["text"] !== "") {
+        const t = truncate(params["text"], 40);
+        return `wait_for text "${t}"${tail}`;
+      }
       const sel = typeof params["selector"] === "string" ? truncate(params["selector"], 48) : "?";
       return `wait_for ${sel}${tail}`;
     }

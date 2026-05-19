@@ -127,6 +127,13 @@ export interface BrowserAdapter {
     tabId?: number
   ): Promise<Result<ToolResult, Error>>;
 
+  /** Wait for text to appear anywhere in the page body */
+  waitForText(
+    text: string,
+    options?: { timeout?: number; caseSensitive?: boolean },
+    tabId?: number
+  ): Promise<Result<ToolResult, Error>>;
+
   /** Click an element by CSS selector or data-abr-id */
   clickElement(
     selector: string,

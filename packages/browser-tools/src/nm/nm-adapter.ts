@@ -94,6 +94,19 @@ export class NMAdapter implements BrowserAdapter {
     return this.unwrapNm("wait_for", { selector, timeout, tabId } as NMParamMap["wait_for"]);
   }
 
+  async waitForText(
+    text: string,
+    options?: { timeout?: number; caseSensitive?: boolean },
+    tabId?: number
+  ): Promise<Result<ToolResult, Error>> {
+    return this.unwrapNm("wait_for", {
+      text,
+      timeout: options?.timeout,
+      caseSensitive: options?.caseSensitive,
+      tabId,
+    } as NMParamMap["wait_for"]);
+  }
+
   async clickElement(selector: string, tabId?: number): Promise<Result<ToolResult, Error>> {
     return this.unwrapNm("click", { selector, tabId } as NMParamMap["click"]);
   }

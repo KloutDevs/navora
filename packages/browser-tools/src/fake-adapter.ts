@@ -173,6 +173,16 @@ export class FakeAdapter implements BrowserAdapter {
     };
   }
 
+  async waitForText(
+    _text: string,
+    _options?: { timeout?: number; caseSensitive?: boolean },
+    tabId?: number
+  ): Promise<Result<ToolResult, Error>> {
+    if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
+    const target = tabId ?? this.activeTabId;
+    return { ok: true, value: { success: true, durationMs: 0, tabId: target } };
+  }
+
   async clickElement(selector: string, tabId?: number): Promise<Result<ToolResult, Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
     if (this.shouldFail) return { ok: false, error: new Error("FakeAdapter: simulated click failure") };
