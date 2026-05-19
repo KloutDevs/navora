@@ -32,6 +32,7 @@ export {
   type LogEntry,
   type Logger,
   createLogger,
+  createNoOpLogger,
   logger,
 } from "./Logger";
 

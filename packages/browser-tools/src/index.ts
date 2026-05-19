@@ -50,7 +50,10 @@ export {
 } from "./cdp/connection";
 
 export {
+  CDPError,
   createCDPErrorMapper,
+  isCDPError,
+  isTransientCDPError,
   mapCDPError,
   type CDPErrorMapper,
 } from "./cdp/errors";

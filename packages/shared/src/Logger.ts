@@ -252,5 +252,21 @@ export function createLogger(options: LoggerOptions = {}): Logger {
   };
 }
 
+const NOOP_LOGGER: Logger = {
+  trace() {},
+  debug() {},
+  info() {},
+  warn() {},
+  error() {},
+  child() {
+    return NOOP_LOGGER;
+  },
+};
+
+/** Logger that discards all entries (for optional injection sites). */
+export function createNoOpLogger(): Logger {
+  return NOOP_LOGGER;
+}
+
 // Default logger instance
 export const logger = createLogger();

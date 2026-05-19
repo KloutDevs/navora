@@ -6,4 +6,11 @@ export { DevToolsProtocol, type CDPClientOptions, type CDPCommand, type CDPRespo
 export { TabManager, type TabManagerOptions } from "./tab-manager";
 export { CommandExecutor, type CommandExecutorOptions } from "./executor";
 export { ConnectionManager, type ConnectionManagerOptions, type TargetInfo } from "./connection";
-export { createCDPErrorMapper, mapCDPError, type CDPErrorMapper } from "./errors";
+export {
+  CDPError,
+  createCDPErrorMapper,
+  isCDPError,
+  isTransientCDPError,
+  mapCDPError,
+  type CDPErrorMapper,
+} from "./errors";
