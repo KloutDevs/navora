@@ -1,9 +1,10 @@
 /**
  * CDP connection management.
- * Handles connection lifecycle, reconnection, and target discovery.
+ * Handles connection lifecycle and target discovery.
  */
 
-import type { Result } from "@navora/shared";
+import type { Logger, Result } from "@navora/shared";
+import { createNoOpLogger } from "@navora/shared";
 import { DevToolsProtocol } from "./client";
 
 export interface TargetInfo {
@@ -19,36 +20,29 @@ export interface ConnectionManagerOptions {
   port?: number;
   /** Connection timeout in ms */
   connectTimeout?: number;
-  /** Reconnection attempts on failure */
-  maxRetries?: number;
-  /** Delay between retries in ms */
-  retryDelay?: number;
+  /** Structured logger (defaults to no-op). */
+  logger?: Logger;
 }
 
 const DEFAULT_PORT = 9222;
 const DEFAULT_CONNECT_TIMEOUT = 5000;
-const DEFAULT_MAX_RETRIES = 3;
-const DEFAULT_RETRY_DELAY = 1000;
 
 /**
  * ConnectionManager handles the CDP WebSocket lifecycle.
  * - Lazy connect on first use
  * - Target discovery (tabs, pages)
- * - Reconnection with backoff
+ * - {@link DevToolsProtocol#connect} and {@link DevToolsProtocol#send} errors propagate as {@link Result}
  */
 export class ConnectionManager {
   private readonly port: number;
   private readonly connectTimeout: number;
-  private readonly maxRetries: number;
-  private readonly retryDelay: number;
+  private readonly logger: Logger;
   private cdp: DevToolsProtocol;
-  private retryCount = 0;
 
   constructor(options: ConnectionManagerOptions = {}) {
     this.port = options.port ?? DEFAULT_PORT;
     this.connectTimeout = options.connectTimeout ?? DEFAULT_CONNECT_TIMEOUT;
-    this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.retryDelay = options.retryDelay ?? DEFAULT_RETRY_DELAY;
+    this.logger = options.logger ?? createNoOpLogger();
     this.cdp = new DevToolsProtocol({
       port: this.port,
       connectTimeout: this.connectTimeout,
@@ -60,15 +54,20 @@ export class ConnectionManager {
    */
   async connect(): Promise<Result<void, Error>> {
     if (this.cdp.isConnected()) {
+      this.logger.debug("cdp.connect skipped — already connected", { port: this.port });
       return { ok: true, value: undefined };
     }
 
+    this.logger.info("cdp.connect starting", { port: this.port, connectTimeoutMs: this.connectTimeout });
+
     try {
       await this.cdp.connect();
-      this.retryCount = 0;
+      this.logger.info("cdp.connect succeeded", { port: this.port });
       return { ok: true, value: undefined };
     } catch (e) {
-      return { ok: false, error: e as Error };
+      const err = e instanceof Error ? e : new Error(String(e));
+      this.logger.error("cdp.connect failed", err, { port: this.port });
+      return { ok: false, error: err };
     }
   }
 
@@ -78,26 +77,47 @@ export class ConnectionManager {
   async discoverTargets(): Promise<Result<TargetInfo[], Error>> {
     if (!this.cdp.isConnected()) {
       const connected = await this.connect();
-      if (!connected.ok) return { ok: false, error: connected.error };
+      if (!connected.ok) {
+        this.logger.warn("cdp.discoverTargets aborted — connect failed", {
+          port: this.port,
+        });
+        return { ok: false, error: connected.error };
+      }
     }
+
+    this.logger.debug("cdp.discoverTargets sending Target.getTargets", { port: this.port });
 
     try {
       const result = await this.cdp.send("Target.getTargets", {});
-      if (!result.ok) return { ok: false, error: result.error };
+      if (!result.ok) {
+        this.logger.error("cdp.discoverTargets CDP command failed", result.error, {
+          port: this.port,
+        });
+        return { ok: false, error: result.error };
+      }
 
       const targets = (result.value as { targetInfos?: TargetInfo[] })?.targetInfos ?? [];
+      const mapped = targets.map((t) => ({
+        targetId: t.targetId,
+        type: t.type,
+        url: t.url ?? "",
+        title: t.title !== undefined ? t.title : "",
+        favIconUrl: t.favIconUrl !== undefined ? t.favIconUrl : "",
+      }));
+
+      this.logger.info("cdp.discoverTargets completed", {
+        port: this.port,
+        targetCount: mapped.length,
+      });
+
       return {
         ok: true,
-        value: targets.map((t) => ({
-          targetId: t.targetId,
-          type: t.type,
-          url: t.url ?? "",
-          title: t.title !== undefined ? t.title : "",
-          favIconUrl: t.favIconUrl !== undefined ? t.favIconUrl : "",
-        })),
+        value: mapped,
       };
     } catch (e) {
-      return { ok: false, error: e as Error };
+      const err = e instanceof Error ? e : new Error(String(e));
+      this.logger.error("cdp.discoverTargets threw", err, { port: this.port });
+      return { ok: false, error: err };
     }
   }
 
@@ -107,8 +127,19 @@ export class ConnectionManager {
   async attachTarget(targetId: string): Promise<Result<string, Error>> {
     if (!this.cdp.isConnected()) {
       const connected = await this.connect();
-      if (!connected.ok) return { ok: false, error: connected.error };
+      if (!connected.ok) {
+        this.logger.warn("cdp.attachTarget aborted — connect failed", {
+          port: this.port,
+          targetId,
+        });
+        return { ok: false, error: connected.error };
+      }
     }
+
+    this.logger.debug("cdp.attachTarget sending Target.attachToTarget", {
+      port: this.port,
+      targetId,
+    });
 
     try {
       const result = await this.cdp.send("Target.attachToTarget", {
@@ -116,12 +147,25 @@ export class ConnectionManager {
         flatten: true,
       });
 
-      if (!result.ok) return { ok: false, error: result.error };
+      if (!result.ok) {
+        this.logger.error("cdp.attachTarget CDP command failed", result.error, {
+          port: this.port,
+          targetId,
+        });
+        return { ok: false, error: result.error };
+      }
 
       const sessionId = (result.value as { sessionId?: string })?.sessionId ?? "";
+      this.logger.info("cdp.attachTarget completed", {
+        port: this.port,
+        targetId,
+        sessionIdLength: sessionId.length,
+      });
       return { ok: true, value: sessionId };
     } catch (e) {
-      return { ok: false, error: e as Error };
+      const err = e instanceof Error ? e : new Error(String(e));
+      this.logger.error("cdp.attachTarget threw", err, { port: this.port, targetId });
+      return { ok: false, error: err };
     }
   }
 
@@ -129,7 +173,14 @@ export class ConnectionManager {
    * Disconnect and clean up.
    */
   async dispose(): Promise<Result<void, Error>> {
-    return this.cdp.dispose();
+    this.logger.info("cdp.dispose starting", { port: this.port });
+    const result = await this.cdp.dispose();
+    if (result.ok) {
+      this.logger.info("cdp.dispose completed", { port: this.port });
+    } else {
+      this.logger.error("cdp.dispose failed", result.error, { port: this.port });
+    }
+    return result;
   }
 
   /** Get the underlying CDP client */
@@ -140,10 +191,5 @@ export class ConnectionManager {
   /** Check connection status */
   isConnected(): boolean {
     return this.cdp.isConnected();
-  }
-
-  /** Get current retry count */
-  getRetryCount(): number {
-    return this.retryCount;
   }
 }

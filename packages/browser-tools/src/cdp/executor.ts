@@ -4,9 +4,8 @@
  */
 
 import type { Result } from "@navora/shared";
-import type {
-  DevToolsProtocol,
-} from "./client";
+import { createNoOpLogger, type Logger } from "@navora/shared";
+import type { DevToolsProtocol } from "./client";
 import type { TabManager } from "./tab-manager";
 import type {
   ToolResult,
@@ -16,8 +15,7 @@ import type {
   NetworkRequest,
   CookieInfo,
 } from "../adapter";
-import type { CDPErrorMapper } from "./errors";
-import { ProtocolErrorCode } from "@navora/protocol";
+import { isCDPError, isTransientCDPError, type CDPErrorMapper } from "./errors";
 
 export interface CommandExecutorOptions {
   cdp: DevToolsProtocol;
@@ -25,6 +23,7 @@ export interface CommandExecutorOptions {
   errorMapper: CDPErrorMapper;
   /** Default timeout in ms */
   defaultTimeout?: number;
+  logger?: Logger;
 }
 
 const DEFAULT_TIMEOUT_MS = 10000;
@@ -36,12 +35,73 @@ export class CommandExecutor {
   private readonly tabs: TabManager;
   private readonly errorMapper: CDPErrorMapper;
   private readonly defaultTimeout: number;
+  private readonly logger: Logger;
+
+  private readonly MAX_RETRY_ATTEMPTS = 2;
+  private readonly RETRY_BACKOFF_MS = [200, 400] as const;
 
   constructor(options: CommandExecutorOptions) {
     this.cdp = options.cdp;
     this.tabs = options.tabManager;
     this.errorMapper = options.errorMapper;
     this.defaultTimeout = options.defaultTimeout ?? DEFAULT_TIMEOUT_MS;
+    this.logger = options.logger ?? createNoOpLogger();
+  }
+
+  private async withRetry<T>(
+    fn: () => Promise<Result<T, Error>>,
+    methodName: string
+  ): Promise<Result<T, Error>> {
+    let lastResult: Result<T, Error> | undefined;
+    for (let attempt = 0; attempt < this.MAX_RETRY_ATTEMPTS; attempt++) {
+      const result = await fn();
+      if (result.ok || !isTransientCDPError(result.error)) {
+        return result;
+      }
+      lastResult = result;
+      const delayMs = this.RETRY_BACKOFF_MS[attempt] ?? 400;
+      this.logger.warn("cdp transient error, retrying", {
+        method: methodName,
+        attempt: attempt + 1,
+        code: isCDPError(result.error) ? result.error.code : undefined,
+        delayMs,
+      });
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    this.logger.error("cdp retry exhausted", undefined, {
+      method: methodName,
+      attempts: this.MAX_RETRY_ATTEMPTS,
+    });
+    return lastResult!;
+  }
+
+  private async pollUntil(
+    expression: string,
+    timeoutMs: number,
+    _tabId: number | undefined
+  ): Promise<Result<void, Error>> {
+    const start = Date.now();
+    const pollInterval = 200;
+    const maxAttempts = Math.floor(timeoutMs / pollInterval);
+
+    for (let i = 0; i < maxAttempts; i++) {
+      const queryResult = await this.cdp.send("Runtime.evaluate", {
+        expression,
+        returnByValue: true,
+      });
+      if (
+        queryResult.ok &&
+        (queryResult.value as { result?: { value?: boolean } })?.result?.value
+      ) {
+        this.logger.debug("pollUntil matched", {
+          expression: expression.slice(0, 60),
+          elapsed: Date.now() - start,
+        });
+        return { ok: true, value: undefined };
+      }
+      await new Promise((r) => setTimeout(r, pollInterval));
+    }
+    return { ok: false, error: new Error(`Condition not met within ${timeoutMs}ms`) };
   }
 
   private getTargetId(tabId?: number): string | undefined {
@@ -64,81 +124,108 @@ export class CommandExecutor {
     url: string,
     tabId?: number
   ): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      this.logger.debug("navigate", { url, tabId: target });
 
-    try {
-      // Activate target
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      // Navigate
-      const result = await this.cdp.send("Page.navigate", { url });
+        const result = await this.cdp.send("Page.navigate", { url });
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("navigate failed", err, { url, tabId: target });
+          return { ok: false, error: err };
+        }
 
-      return {
-        ok: true,
-        value: {
-          success: true,
-          data: result as unknown,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      const err = this.errorMapper(e);
-      return {
-        ok: false,
-        error: err,
-      };
-    }
+        return {
+          ok: true,
+          value: {
+            success: true,
+            data: result.value as unknown,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("navigate failed", err, { url, tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "navigate");
   }
 
   /**
    * Go back in history.
    */
   async goBack(tabId?: number): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      this.logger.debug("goBack", { tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      const result = await this.cdp.send("Runtime.evaluate", { expression: "window.history.back()", returnByValue: true });
-      return {
-        ok: true,
-        value: {
-          success: true,
-          data: result,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        const result = await this.cdp.send("Runtime.evaluate", {
+          expression: "window.history.back()",
+          returnByValue: true,
+        });
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("goBack failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
+        return {
+          ok: true,
+          value: {
+            success: true,
+            data: result,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("goBack failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "goBack");
   }
 
   /**
    * Reload the current page.
    */
   async reload(tabId?: number): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      this.logger.debug("reload", { tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      await this.cdp.send("Page.reload", {});
-      return {
-        ok: true,
-        value: {
-          success: true,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        const reloadResult = await this.cdp.send("Page.reload", {});
+        if (!reloadResult.ok) {
+          const err = this.errorMapper(reloadResult.error);
+          this.logger.error("reload failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
+        return {
+          ok: true,
+          value: {
+            success: true,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("reload failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "reload");
   }
 
   /**
@@ -146,14 +233,18 @@ export class CommandExecutor {
    */
   async extractDom(tabId?: number): Promise<Result<DomResult, Error>> {
     const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    this.logger.debug("extractDom", { tabId: target });
 
     try {
       await this.activateTab(tabId);
 
       // Get document
       const docResult = await this.cdp.send("DOM.getDocument", { depth: -1 });
-      if (!docResult.ok) return { ok: false, error: docResult.error };
+      if (!docResult.ok) {
+        const err = this.errorMapper(docResult.error);
+        this.logger.error("extractDom failed", err, { tabId: target, step: "getDocument" });
+        return { ok: false, error: err };
+      }
 
       // Query all interactive elements and assign abr-ids
       const queryResult = await this.cdp.send("DOM.querySelectorAll", {
@@ -166,7 +257,17 @@ export class CommandExecutor {
         nodeId: (docResult.value as { root?: { nodeId?: number } }).root?.nodeId ?? 0,
       });
 
-      if (!htmlResult.ok) return { ok: false, error: htmlResult.error };
+      if (!queryResult.ok) {
+        const err = this.errorMapper(queryResult.error);
+        this.logger.error("extractDom failed", err, { tabId: target, step: "querySelectorAll" });
+        return { ok: false, error: err };
+      }
+
+      if (!htmlResult.ok) {
+        const err = this.errorMapper(htmlResult.error);
+        this.logger.error("extractDom failed", err, { tabId: target, step: "getOuterHTML" });
+        return { ok: false, error: err };
+      }
 
       let html = (htmlResult.value as string) ?? "";
       const truncated = html.length > DOM_SIZE_LIMIT;
@@ -183,7 +284,9 @@ export class CommandExecutor {
         },
       };
     } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
+      const err = this.errorMapper(e);
+      this.logger.error("extractDom failed", err, { tabId: target });
+      return { ok: false, error: err };
     }
   }
 
@@ -191,14 +294,15 @@ export class CommandExecutor {
    * Extract visible text from the page.
    */
   async extractText(tabId?: number): Promise<Result<string, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      this.logger.debug("extractText", { tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      // Evaluate JS to extract visible text
-      const result = await this.cdp.send("Runtime.evaluate", {
-        expression: `
+        const result = await this.cdp.send("Runtime.evaluate", {
+          expression: `
           (() => {
             const walker = document.createTreeWalker(
               document.body,
@@ -228,17 +332,24 @@ export class CommandExecutor {
             return texts.join('\\n');
           })()
         `,
-        returnByValue: true,
-      });
+          returnByValue: true,
+        });
 
-      if (!result.ok) return { ok: false, error: result.error };
-      return {
-        ok: true,
-        value: (result.value as { result?: { value?: string } })?.result?.value ?? "",
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("extractText failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
+        return {
+          ok: true,
+          value: (result.value as { result?: { value?: string } })?.result?.value ?? "",
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("extractText failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "extractText");
   }
 
   /**
@@ -252,44 +363,67 @@ export class CommandExecutor {
     const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
     const start = Date.now();
     const maxWait = timeout ?? this.defaultTimeout;
+    this.logger.debug("waitForSelector", { selector, timeout: maxWait, tabId: target });
 
     try {
       await this.activateTab(tabId);
 
-      // Poll until selector found or timeout
-      const pollInterval = 200;
-      const maxAttempts = Math.floor(maxWait / pollInterval);
+      const expression = `document.querySelector('${selector.replace(/'/g, "\\'")}') !== null`;
+      const pollResult = await this.pollUntil(expression, maxWait, tabId);
 
-      for (let i = 0; i < maxAttempts; i++) {
-        const queryResult = await this.cdp.send("Runtime.evaluate", {
-          expression: `document.querySelector('${selector.replace(/'/g, "\\'")}') !== null`,
-          returnByValue: true,
-        });
-
-        if (
-          queryResult.ok &&
-          (queryResult.value as { result?: { value?: boolean } })?.result?.value
-        ) {
-          return {
-            ok: true,
-            value: {
-              success: true,
-              durationMs: Date.now() - start,
-              tabId: target,
-            },
-          };
-        }
-
-        await new Promise((r) => setTimeout(r, pollInterval));
+      if (pollResult.ok) {
+        return {
+          ok: true,
+          value: {
+            success: true,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
       }
 
-      return {
-        ok: false,
-        error: new Error(`Selector not found within ${maxWait}ms: ${selector}`),
-      };
+      const err = new Error(`Selector not found within ${maxWait}ms: ${selector}`);
+      this.logger.error("waitForSelector failed", err, { selector, tabId: target });
+      return { ok: false, error: err };
     } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
+      const err = this.errorMapper(e);
+      this.logger.error("waitForSelector failed", err, { selector, tabId: target });
+      return { ok: false, error: err };
     }
+  }
+
+  async waitForText(
+    text: string,
+    options?: { timeout?: number; caseSensitive?: boolean },
+    tabId?: number
+  ): Promise<Result<void, Error>> {
+    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+    const timeoutMs = options?.timeout ?? this.defaultTimeout;
+    const cs = options?.caseSensitive ?? false;
+
+    await this.activateTab(tabId);
+
+    const escaped = text.replace(/'/g, "\\'");
+    const expression = cs
+      ? `document.body.innerText.includes('${escaped}')`
+      : `document.body.innerText.toLowerCase().includes('${escaped.toLowerCase()}')`;
+
+    this.logger.debug("waitForText start", {
+      text,
+      caseSensitive: cs,
+      timeout: timeoutMs,
+      tabId: target,
+    });
+
+    const result = await this.pollUntil(expression, timeoutMs, tabId);
+
+    if (result.ok) {
+      this.logger.info("waitForText found", { text, tabId: target });
+    } else {
+      this.logger.warn("waitForText timeout", { text, timeout: timeoutMs, tabId: target });
+    }
+
+    return result;
   }
 
   /**
@@ -299,48 +433,57 @@ export class CommandExecutor {
     selector: string,
     tabId?: number
   ): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      this.logger.debug("clickElement", { selector, tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      // Resolve selector to node — returnByValue:false to get objectId reference
-      const queryResult = await this.cdp.send("Runtime.evaluate", {
-        expression: `document.querySelector('${selector.replace(/'/g, "\\'")}')`,
-        returnByValue: false,
-      });
+        const queryResult = await this.cdp.send("Runtime.evaluate", {
+          expression: `document.querySelector('${selector.replace(/'/g, "\\'")}')`,
+          returnByValue: false,
+        });
 
-      if (!queryResult.ok) {
-        return { ok: false, error: new Error(`Element not found: ${selector}`) };
-      }
-      const evalResult = (queryResult.value as { result?: { objectId?: string; subtype?: string } })?.result;
-      if (!evalResult?.objectId || evalResult.subtype === "null") {
+        if (!queryResult.ok) {
+          const err = this.errorMapper(queryResult.error);
+          this.logger.error("clickElement failed", err, { selector, tabId: target });
+          return { ok: false, error: err };
+        }
+        const evalResult = (queryResult.value as { result?: { objectId?: string; subtype?: string } })?.result;
+        if (!evalResult?.objectId || evalResult.subtype === "null") {
+          const err = new Error(`Element not found: ${selector}`);
+          this.logger.error("clickElement failed", err, { selector, tabId: target });
+          return { ok: false, error: err };
+        }
+
+        const objectId = evalResult.objectId;
+
+        const clickResult = await this.cdp.send("Runtime.callFunctionOn", {
+          objectId,
+          functionDeclaration: `function() { this.click(); }`,
+        });
+        if (!clickResult.ok) {
+          const err = this.errorMapper(clickResult.error);
+          this.logger.error("clickElement failed", err, { selector, tabId: target });
+          return { ok: false, error: err };
+        }
+
         return {
-          ok: false,
-          error: new Error(`Element not found: ${selector}`),
+          ok: true,
+          value: {
+            success: true,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
         };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("clickElement failed", err, { selector, tabId: target });
+        return { ok: false, error: err };
       }
-
-      const objectId = evalResult.objectId;
-
-      // Dispatch click
-      await this.cdp.send("Runtime.callFunctionOn", {
-        objectId,
-        functionDeclaration: `function() { this.click(); }`,
-      });
-
-      return {
-        ok: true,
-        value: {
-          success: true,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+    }, "clickElement");
   }
 
   /**
@@ -351,44 +494,66 @@ export class CommandExecutor {
     selector?: string,
     tabId?: number
   ): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      this.logger.debug("typeText", { tabId: target, hasSelector: Boolean(selector) });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      const selectorExpr = selector
-        ? `document.querySelector('${selector.replace(/'/g, "\\'")}')`
-        : "document.activeElement";
+        const selectorExpr = selector
+          ? `document.querySelector('${selector.replace(/'/g, "\\'")}')`
+          : "document.activeElement";
 
-      // Focus
-      await this.cdp.send("Runtime.evaluate", {
-        expression: `(${selectorExpr})?.focus()`,
-      });
+        const focusResult = await this.cdp.send("Runtime.evaluate", {
+          expression: `(${selectorExpr})?.focus()`,
+        });
+        if (!focusResult.ok) {
+          const err = this.errorMapper(focusResult.error);
+          this.logger.error("typeText failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      // Clear and type
-      await this.cdp.send("Runtime.evaluate", {
-        expression: `(${selectorExpr})?.select()`,
-      });
+        const selectResult = await this.cdp.send("Runtime.evaluate", {
+          expression: `(${selectorExpr})?.select()`,
+        });
+        if (!selectResult.ok) {
+          const err = this.errorMapper(selectResult.error);
+          this.logger.error("typeText failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      // Insert text and dispatch React-compatible input/change events
-      await this.cdp.send("Input.insertText", { text });
+        const insertResult = await this.cdp.send("Input.insertText", { text });
+        if (!insertResult.ok) {
+          const err = this.errorMapper(insertResult.error);
+          this.logger.error("typeText failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      await this.cdp.send("Runtime.evaluate", {
-        expression: `(() => { const el = ${selectorExpr}; if (el) { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } })()`,
-      });
+        const dispatchResult = await this.cdp.send("Runtime.evaluate", {
+          expression: `(() => { const el = ${selectorExpr}; if (el) { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } })()`,
+        });
+        if (!dispatchResult.ok) {
+          const err = this.errorMapper(dispatchResult.error);
+          this.logger.error("typeText failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      return {
-        ok: true,
-        value: {
-          success: true,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        return {
+          ok: true,
+          value: {
+            success: true,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("typeText failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "typeText");
   }
 
   /**
@@ -399,72 +564,91 @@ export class CommandExecutor {
     deltaY?: number,
     tabId?: number
   ): Promise<Result<ToolResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
-    const start = Date.now();
-    const dy = deltaY ?? 300;
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      const start = Date.now();
+      const dy = deltaY ?? 300;
+      this.logger.debug("scroll", { tabId: target, hasSelector: Boolean(selector), deltaY: dy });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      if (selector) {
-        await this.cdp.send("Runtime.evaluate", {
-          expression: `document.querySelector('${selector.replace(/'/g, "\\'")}')?.scrollBy(0, ${dy})`,
-        });
-      } else {
-        await this.cdp.send("Runtime.evaluate", {
-          expression: `window.scrollBy(0, ${dy})`,
-        });
+        const scrollResult = selector
+          ? await this.cdp.send("Runtime.evaluate", {
+              expression: `document.querySelector('${selector.replace(/'/g, "\\'")}')?.scrollBy(0, ${dy})`,
+            })
+          : await this.cdp.send("Runtime.evaluate", {
+              expression: `window.scrollBy(0, ${dy})`,
+            });
+
+        if (!scrollResult.ok) {
+          const err = this.errorMapper(scrollResult.error);
+          this.logger.error("scroll failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
+
+        return {
+          ok: true,
+          value: {
+            success: true,
+            durationMs: Date.now() - start,
+            tabId: target,
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("scroll failed", err, { tabId: target });
+        return { ok: false, error: err };
       }
-
-      return {
-        ok: true,
-        value: {
-          success: true,
-          durationMs: Date.now() - start,
-          tabId: target,
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+    }, "scroll");
   }
 
   /**
    * Take a screenshot of the viewport.
    */
   async takeScreenshot(tabId?: number): Promise<Result<string, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      this.logger.debug("takeScreenshot", { tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      const result = await this.cdp.send("Page.captureScreenshot", {
-        format: "png",
-        quality: SCREENSHOT_QUALITY,
-      });
+        const result = await this.cdp.send("Page.captureScreenshot", {
+          format: "png",
+          quality: SCREENSHOT_QUALITY,
+        });
 
-      if (!result.ok) return { ok: false, error: result.error };
-      return {
-        ok: true,
-        value: result.value as string,
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("takeScreenshot failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
+        return {
+          ok: true,
+          value: result.value as string,
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("takeScreenshot failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "takeScreenshot");
   }
 
   /**
    * Get console log entries.
    */
   async getConsoleLogs(tabId?: number): Promise<Result<ConsoleEntry[], Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      this.logger.debug("getConsoleLogs", { tabId: target });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      // Inject interceptor (idempotent) and read buffered logs
-      const result = await this.cdp.send("Runtime.evaluate", {
-        expression: `
+        const result = await this.cdp.send("Runtime.evaluate", {
+          expression: `
           (() => {
             if (!window.__abrConsoleLogs) {
               window.__abrConsoleLogs = [];
@@ -479,24 +663,36 @@ export class CommandExecutor {
             return window.__abrConsoleLogs;
           })()
         `,
-        returnByValue: true,
-        awaitPromise: false,
-      });
+          returnByValue: true,
+          awaitPromise: false,
+        });
 
-      if (!result.ok) return { ok: false, error: result.error };
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("getConsoleLogs failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      const entries = ((result.value as { result?: { value?: unknown } })?.result?.value as Array<{ type: string; timestamp: number; args: string[] }>) ?? [];
-      return {
-        ok: true,
-        value: entries.map((e) => ({
-          type: e.type as ConsoleEntry["type"],
-          timestamp: e.timestamp,
-          args: e.args ?? [],
-        })),
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        const entries =
+          ((result.value as { result?: { value?: unknown } })?.result?.value as Array<{
+            type: string;
+            timestamp: number;
+            args: string[];
+          }>) ?? [];
+        return {
+          ok: true,
+          value: entries.map((e) => ({
+            type: e.type as ConsoleEntry["type"],
+            timestamp: e.timestamp,
+            args: e.args ?? [],
+          })),
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("getConsoleLogs failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "getConsoleLogs");
   }
 
   /**
@@ -509,20 +705,25 @@ export class CommandExecutor {
     statusCodeRange?: [number, number];
     sinceTimestamp?: number;
   }): Promise<Result<NetworkRequest[], Error>> {
+    this.logger.debug("getNetworkRequests", { filters });
+
     try {
-      // Network requests are collected via CDP event listeners
-      // This returns whatever was buffered
       const result = await this.cdp.send("Network.getResponseBody", {});
 
-      if (!result.ok) return { ok: false, error: result.error };
+      if (!result.ok) {
+        const err = this.errorMapper(result.error);
+        this.logger.error("getNetworkRequests failed", err, {});
+        return { ok: false, error: err };
+      }
 
-      // Filter is applied by the caller using the returned data
       return {
         ok: true,
         value: (result.value as NetworkRequest[]) ?? [],
       };
     } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
+      const err = this.errorMapper(e);
+      this.logger.error("getNetworkRequests failed", err, {});
+      return { ok: false, error: err };
     }
   }
 
@@ -530,12 +731,32 @@ export class CommandExecutor {
    * Get cookies for a domain.
    */
   async getCookies(domain?: string): Promise<Result<CookieInfo[], Error>> {
+    this.logger.debug("getCookies", { domain });
+
     try {
       const result = await this.cdp.send("Network.getCookies", domain ? { urls: [`https://${domain}`] } : {});
 
-      if (!result.ok) return { ok: false, error: result.error };
+      if (!result.ok) {
+        const err = this.errorMapper(result.error);
+        this.logger.error("getCookies failed", err, { domain });
+        return { ok: false, error: err };
+      }
 
-      const cookies = (result.value as { cookies?: Array<{ name: string; value: string; domain: string; path: string; secure: boolean; httpOnly: boolean; sameSite?: string; expires: number }> })?.cookies ?? [];
+      const cookies =
+        (
+          result.value as {
+            cookies?: Array<{
+              name: string;
+              value: string;
+              domain: string;
+              path: string;
+              secure: boolean;
+              httpOnly: boolean;
+              sameSite?: string;
+              expires: number;
+            }>;
+          }
+        )?.cookies ?? [];
 
       return {
         ok: true,
@@ -551,7 +772,9 @@ export class CommandExecutor {
         })),
       };
     } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
+      const err = this.errorMapper(e);
+      this.logger.error("getCookies failed", err, { domain });
+      return { ok: false, error: err };
     }
   }
 
@@ -563,29 +786,45 @@ export class CommandExecutor {
     source: string,
     tabId?: number
   ): Promise<Result<ScriptResult, Error>> {
-    const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+    return this.withRetry(async () => {
+      const target = tabId ?? this.tabs.getActive()?.tabId ?? 0;
+      this.logger.debug("executeScript", { tabId: target, sourceLength: source.length });
 
-    try {
-      await this.activateTab(tabId);
+      try {
+        await this.activateTab(tabId);
 
-      const result = await this.cdp.send("Runtime.evaluate", {
-        expression: source,
-        returnByValue: true,
-        awaitPromise: true,
-      });
+        const result = await this.cdp.send("Runtime.evaluate", {
+          expression: source,
+          returnByValue: true,
+          awaitPromise: true,
+        });
 
-      if (!result.ok) return { ok: false, error: result.error };
+        if (!result.ok) {
+          const err = this.errorMapper(result.error);
+          this.logger.error("executeScript failed", err, { tabId: target });
+          return { ok: false, error: err };
+        }
 
-      const valueResult = result.value as { result?: { type?: string; value?: unknown; description?: string; exceptionDetails?: { exception?: { description?: string } } } };
-      return {
-        ok: true,
-        value: {
-          value: valueResult.result?.value,
-          exception: valueResult.result?.exceptionDetails?.exception?.description ?? "",
-        },
-      };
-    } catch (e) {
-      return { ok: false, error: this.errorMapper(e) };
-    }
+        const valueResult = result.value as {
+          result?: {
+            type?: string;
+            value?: unknown;
+            description?: string;
+            exceptionDetails?: { exception?: { description?: string } };
+          };
+        };
+        return {
+          ok: true,
+          value: {
+            value: valueResult.result?.value,
+            exception: valueResult.result?.exceptionDetails?.exception?.description ?? "",
+          },
+        };
+      } catch (e) {
+        const err = this.errorMapper(e);
+        this.logger.error("executeScript failed", err, { tabId: target });
+        return { ok: false, error: err };
+      }
+    }, "executeScript");
   }
 }
