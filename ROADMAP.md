@@ -69,8 +69,7 @@ The stability layer is solid. The tool surface is still thin. That changes next.
 
 ## v0.3 — Parity (close the tool gap)
 
-**Goal**: match or exceed chrome-devtools-mcp's tool count.  
-**Target**: Q3 2026.
+**Goal**: match or exceed chrome-devtools-mcp's tool count.
 
 ### Input
 
@@ -104,8 +103,7 @@ Network capture is activated per-tab via `Network.enable` — no overhead on tab
 
 ## v0.4 — Differentiation (weaponize the runtime)
 
-**Goal**: build features chrome-devtools-mcp cannot ship because of their architecture.  
-**Target**: Q4 2026.
+**Goal**: build features chrome-devtools-mcp cannot ship because of their architecture.
 
 ### Session replay
 
@@ -151,8 +149,7 @@ This is a hard differentiator for production agent deployments where the runtime
 
 ## v0.5 — Multi-profile orchestration
 
-**Goal**: make Navora the only browser runtime that supports multi-agent, multi-profile workflows.  
-**Target**: Q1 2027.
+**Goal**: make Navora the only browser runtime that supports multi-agent, multi-profile workflows.
 
 The `NMMultiplexer` already routes by profile ID. v0.5 builds the surface:
 
@@ -167,8 +164,7 @@ The `NMMultiplexer` already routes by profile ID. v0.5 builds the surface:
 
 ## v0.6 — Distribution and DX
 
-**Goal**: zero-friction install, signed extension, first-class docs.  
-**Target**: Q2 2027.
+**Goal**: zero-friction install, signed extension, first-class docs.
 
 - Chrome Web Store listing for the extension (no manual sideloading)
 - `npx navora-claude-plugin` fully self-contained (no manual daemon management)
