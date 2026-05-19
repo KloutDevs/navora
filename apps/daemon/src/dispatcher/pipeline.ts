@@ -3,7 +3,15 @@
  * validate → permissionCheck → rateLimit → adapterRoute → captureBlobs → redact → persist → respond
  */
 
-import type { BrowserAdapter, ToolResult, TabInfo, DomResult, ScriptResult, ConsoleEntry } from "@navora/browser-tools";
+import {
+  isCDPError,
+  type BrowserAdapter,
+  type ToolResult,
+  type TabInfo,
+  type DomResult,
+  type ScriptResult,
+  type ConsoleEntry,
+} from "@navora/browser-tools";
 import type { Logger } from "@navora/shared";
 import { ok, err, isOk, isError, type Result } from "@navora/shared";
 import { type SqlitePersistenceLayer } from "../persistence/index";
@@ -102,8 +110,8 @@ export class Dispatcher {
       trace: () => {},
       debug: () => {},
       info: () => {},
-      warn: console.warn,
-      error: console.error,
+      warn: () => {},
+      error: () => {},
       child: () => this.createDefaultLogger(),
     };
   }
@@ -223,9 +231,28 @@ export class Dispatcher {
     try {
       toolResult = await this.executeTool(adapter, toolName, params, profileId);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger?.error?.(`Dispatcher: tool execution failed - ${errorMessage}`);
-      return this.createErrorResponse(id, toolName, startTime, errorMessage, "EXECUTION_ERROR");
+      const code = this.resolveErrorCode(error);
+      const msg = error instanceof Error ? error.message : String(error);
+
+      if (code === 503) {
+        this.logger.warn("cdp not connected", {
+          tool: toolName,
+          profileId,
+          cdpCode: isCDPError(error) ? error.code : undefined,
+        });
+      } else if (code === 504) {
+        this.logger.warn("cdp timeout", { tool: toolName, profileId });
+      } else if (code === 404) {
+        this.logger.info("element not found", { tool: toolName, profileId });
+      } else {
+        this.logger.error(
+          "tool execution failed",
+          error instanceof Error ? error : undefined,
+          { tool: toolName, errorCode: code, error: msg }
+        );
+      }
+
+      return this.createErrorResponse(id, toolName, startTime, msg, code.toString());
     }
 
     // Step 8: Persist result
@@ -398,13 +425,30 @@ export class Dispatcher {
 
       case "browser_wait_for": {
         if (!adapter) throw new ExtensionNotConnectedError(profileId);
-        const selector = params["selector"] as string;
-        if (!selector) throw new Error("Missing required param: selector");
+        const selector = params["selector"] as string | undefined;
+        const text = params["text"] as string | undefined;
         const timeout = params["timeout"] as number | undefined;
-        const result = await adapter.waitForSelector(selector, timeout, tabId);
-        if (isError(result)) {
-          throw result.error;
+
+        if (!selector && !text) {
+          throw new Error("Missing required param: selector or text");
         }
+
+        if (text) {
+          const caseSensitive = params["caseSensitive"] as boolean | undefined;
+          const waitOpts: { timeout?: number; caseSensitive?: boolean } = {};
+          if (timeout !== undefined) waitOpts.timeout = timeout;
+          if (caseSensitive !== undefined) waitOpts.caseSensitive = caseSensitive;
+          const result = await adapter.waitForText(
+            text,
+            Object.keys(waitOpts).length > 0 ? waitOpts : undefined,
+            tabId
+          );
+          if (isError(result)) throw result.error;
+          return result.value;
+        }
+
+        const result = await adapter.waitForSelector(selector!, timeout, tabId);
+        if (isError(result)) throw result.error;
         return result.value;
       }
 
@@ -626,6 +670,9 @@ export class Dispatcher {
   }
 
   private getErrorCodeNumber(code: string): number {
+    if (/^\d+$/.test(code)) {
+      return Number(code);
+    }
     const codeMap: Record<string, number> = {
       VALIDATION_ERROR: 400,
       PERMISSION_ERROR: 403,
@@ -635,6 +682,19 @@ export class Dispatcher {
       EXECUTION_ERROR: 500,
     };
     return codeMap[code] ?? 500;
+  }
+
+  private resolveErrorCode(error: unknown): number {
+    if (isCDPError(error)) {
+      if ([-1, -3, -32000].includes(error.code)) return 503;
+      if (error.code === -2) return 504;
+    }
+    if (error instanceof Error) {
+      const m = error.message.toLowerCase();
+      if (m.startsWith("missing required param")) return 400;
+      if (m.includes("not found") || m.includes("selector")) return 404;
+    }
+    return 500;
   }
 
   private getKnownTools(): string[] {
