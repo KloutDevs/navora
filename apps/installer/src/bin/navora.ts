@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Shim de entrada para el CLI navora.
  *

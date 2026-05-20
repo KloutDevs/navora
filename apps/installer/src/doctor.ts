@@ -32,9 +32,9 @@ export function computeVerdict(state: InstallerEnvState): DoctorVerdict {
   }
 
   if (state.cdpPort === undefined) {
-    failures.push({
-      key: 'cdp-unreachable',
-      message: `CDP no responde en ningún puerto conocido (${[9222, 9223, 9224].join(', ')})`,
+    warnings.push({
+      key: 'cdp-not-detected',
+      message: `Chrome no detectado en puertos CDP (${[9222, 9223, 9224].join(', ')}) — abrí Chrome para usar las herramientas de browser`,
     });
   }
 
