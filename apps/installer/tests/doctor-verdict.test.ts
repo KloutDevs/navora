@@ -35,10 +35,11 @@ describe('computeVerdict', () => {
     expect(verdict.failures.some((f) => f.key === 'daemon-unreachable')).toBe(true);
   });
 
-  it('cdpPort undefined → failure, healthy false', () => {
+  it('cdpPort undefined → warning only, sigue healthy', () => {
     const verdict = computeVerdict(makeState({ cdpPort: undefined }));
-    expect(verdict.healthy).toBe(false);
-    expect(verdict.failures.some((f) => f.key === 'cdp-unreachable')).toBe(true);
+    expect(verdict.healthy).toBe(true);
+    expect(verdict.failures).toHaveLength(0);
+    expect(verdict.warnings.some((w) => w.key === 'cdp-not-detected')).toBe(true);
   });
 
   it('claudeMcpInstalled false + daemon+CDP ok → warning only, sigue healthy', () => {
@@ -55,9 +56,11 @@ describe('computeVerdict', () => {
     expect(verdict.warnings.some((w) => w.key === 'no-browsers')).toBe(true);
   });
 
-  it('daemon unreachable Y cdp unreachable → dos failures', () => {
+  it('daemon unreachable Y cdp unreachable → un failure y un warning', () => {
     const verdict = computeVerdict(makeState({ daemonReachable: false, cdpPort: undefined }));
     expect(verdict.healthy).toBe(false);
-    expect(verdict.failures).toHaveLength(2);
+    expect(verdict.failures).toHaveLength(1);
+    expect(verdict.failures.some((f) => f.key === 'daemon-unreachable')).toBe(true);
+    expect(verdict.warnings.some((w) => w.key === 'cdp-not-detected')).toBe(true);
   });
 });
