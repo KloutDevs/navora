@@ -1,6 +1,6 @@
 {
   "name": "navora-daemon",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -8,6 +8,9 @@
     "navora-daemon": "./dist/main.js"
   },
   "files": ["dist"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "test": "vitest run",

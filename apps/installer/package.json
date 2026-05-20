@@ -1,12 +1,12 @@
 {
   "name": "navora",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Instalador TUI para Navora AI Browser Runtime (Claude Code, Cursor, verificación)",
   "type": "module",
   "bin": {
-    "navora": "./dist/index.js"
+    "navora": "./dist/bin/navora.js"
   },
-  "main": "./dist/index.js",
+  "main": "./dist/bin/navora.js",
   "files": ["dist"],
   "scripts": {
     "build": "tsup",
