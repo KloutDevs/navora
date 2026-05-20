@@ -51,24 +51,52 @@ jobs:
 
       - name: Publish navora-daemon
         working-directory: apps/daemon
-        run: npm publish --access public
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version 2>/dev/null | grep -q "$VER"; then
+            echo "$PKG@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish navora (installer)
         working-directory: apps/installer
-        run: npm publish --access public
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version 2>/dev/null | grep -q "$VER"; then
+            echo "$PKG@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish navora-claude-plugin
         working-directory: apps/claude-plugin
-        run: npm publish --access public
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version 2>/dev/null | grep -q "$VER"; then
+            echo "$PKG@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish navora-cursor-plugin
         working-directory: apps/cursor-plugin
-        run: npm publish --access public
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "$PKG@$VER" version 2>/dev/null | grep -q "$VER"; then
+            echo "$PKG@$VER already published, skipping"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
