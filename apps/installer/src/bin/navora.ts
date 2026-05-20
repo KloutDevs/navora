@@ -29,13 +29,21 @@ function readVersion(): string {
 }
 
 const USAGE = `\
-navora — Navora AI Browser Runtime installer
+navora — Navora AI Browser Runtime
 
 Usage:
-  navora              Launch interactive TUI installer
-  navora doctor       Run health check (exit 0 = healthy, 1 = unhealthy)
-  navora --version    Print version
-  navora --help       Show this help
+  navora                    Launch interactive TUI installer
+  navora doctor             Environment health check
+                              exit 0 = daemon reachable (healthy)
+                              exit 1 = daemon unreachable (unhealthy)
+  navora doctor --debug     Health check with verbose output
+  navora --version          Print version
+  navora --help             Show this help
+
+Notes:
+  Chrome remote debugging (CDP) is only required for developer tools
+  (cdp_evaluate, cdp_send_command, cdp_network_har). Standard browser
+  tools work through the Navora extension via Native Messaging.
 `;
 
 async function main(): Promise<void> {
