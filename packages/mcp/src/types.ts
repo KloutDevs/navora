@@ -94,7 +94,7 @@ export class ToolRegistry {
    * Register a tool with its handler
    */
   register<TInput = unknown, TOutput = unknown>(
-    definition: ToolDefinition<TInput, TOutput>,
+    definition: ToolDefinition,
     handler: ToolHandler<TInput, TOutput>
   ): void {
     if (this.tools.has(definition.name)) {
