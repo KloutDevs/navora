@@ -71,6 +71,15 @@ export async function waitForSelector(selector: string, timeout?: number, tabId?
   });
 }
 
+export async function waitForText(text: string, timeout?: number, caseSensitive?: boolean, tabId?: number): Promise<ToolResult> {
+  return call<ToolResult>("browser_wait_for", {
+    text,
+    ...(timeout !== undefined && { timeout }),
+    ...(caseSensitive !== undefined && { caseSensitive }),
+    ...(tabId !== undefined && { tabId }),
+  });
+}
+
 export async function executeScript(source: string, tabId?: number): Promise<ScriptResult> {
   return call<ScriptResult>("browser_execute_script", { source, ...(tabId !== undefined && { tabId }) });
 }

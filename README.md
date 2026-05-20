@@ -2,7 +2,7 @@
 
 **Open-source browser automation runtime for AI agents.**
 
-Navora bridges tool-calling AI clients (Claude, Cursor, and any MCP-compatible host) to a real Chrome instance. It exposes 13 browser control tools via the Model Context Protocol over stdio, routing all execution through a local daemon with a per-tab CDP connection pool.
+Navora bridges tool-calling AI clients (Claude, Cursor, and any MCP-compatible host) to a real Chrome instance. It exposes browser control tools via the Model Context Protocol over stdio.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/KloutDevs/navora/actions/workflows/ci.yml/badge.svg)](https://github.com/KloutDevs/navora/actions/workflows/ci.yml)
@@ -11,39 +11,43 @@ Navora bridges tool-calling AI clients (Claude, Cursor, and any MCP-compatible h
 
 ## Quick start
 
-### Claude Code
+### Option A — Recommended (Extension path)
+
+Works on any page without enabling Chrome debug mode.
+
+**1. Run the installer**
 
 ```bash
-claude mcp add navora node /path/to/navora/apps/claude-plugin/dist/index.js
+npx navora
 ```
 
-Or with npx:
+The interactive installer sets up the daemon and Native Messaging host on your machine.
+
+**2. Install the Chrome extension**
+
+- Download the `.zip` from the [latest GitHub Release](https://github.com/KloutDevs/navora/releases)
+- Unzip the archive
+- Open `chrome://extensions` in Chrome
+- Enable **Developer mode** (toggle in the top-right corner)
+- Click **Load unpacked** and select the unzipped folder
+
+> Sideloaded extensions persist across Chrome restarts but must be re-loaded after Chrome updates.
+
+**3. Verify the setup**
 
 ```bash
-claude mcp add navora npx navora-claude-plugin
+navora doctor
 ```
 
-### Cursor
+Exit 0 means the daemon is reachable and healthy. Exit 1 means the daemon is unreachable — check that the installer completed without errors.
 
-Add to your MCP config (`~/.cursor/mcp.json` or workspace `.cursor/mcp.json`):
+---
 
-```json
-{
-  "mcpServers": {
-    "navora": {
-      "command": "node",
-      "args": ["/path/to/navora/apps/cursor-plugin/dist/index.js"]
-    }
-  }
-}
-```
+### Option B — Developer (CDP path)
 
-### Requirements
+Requires Chrome with remote debugging enabled. Gives access to additional low-level CDP tools (`cdp_evaluate`, `cdp_send_command`, `cdp_network_har`). No extension needed.
 
-- Node.js 20+
-- Chrome, Brave, or any Chromium-based browser with remote debugging enabled
-
-Chrome is launched automatically if not already running. To start it manually:
+**1. Start Chrome with remote debugging**
 
 ```bash
 # Chrome
@@ -52,6 +56,29 @@ chrome --remote-debugging-port=9222
 # Brave
 brave --remote-debugging-port=9222
 ```
+
+**2. Register the MCP plugin**
+
+Claude Code:
+
+```bash
+claude mcp add navora npx navora-claude-plugin
+```
+
+Cursor — add to `~/.cursor/mcp.json` or workspace `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "navora": {
+      "command": "npx",
+      "args": ["navora-claude-plugin"]
+    }
+  }
+}
+```
+
+**Requirements:** Node.js 20+, Chrome or any Chromium-based browser.
 
 ---
 
@@ -69,53 +96,49 @@ brave --remote-debugging-port=9222
 | `browser_click` | Click an element by CSS selector or `data-abr-id` |
 | `browser_type` | Type text into a focused input or specific element |
 | `browser_scroll` | Scroll the page or a specific element |
-| `browser_wait_for` | Wait for a CSS selector to appear in the DOM |
+| `browser_wait_for` | Wait for a CSS selector or text content to appear in the page (`text` and `caseSensitive` params available) |
 | `browser_execute_script` | Execute arbitrary JavaScript and return the result |
 | `browser_get_console` | Read buffered console log entries from the page |
 
 All tools accept an optional `tabId` parameter for multi-tab routing.
 
+### Developer-only tools (CDP path required)
+
+These tools require Chrome started with `--remote-debugging-port=9222`.
+
+| Tool | Description |
+|------|-------------|
+| `cdp_evaluate` | Evaluate a JavaScript expression via the CDP Runtime domain |
+| `cdp_send_command` | Send an arbitrary CDP command and return the result |
+| `cdp_network_har` | Export a HAR archive of captured network activity |
+
 ---
 
 ## Architecture
 
+Navora supports two transport paths:
+
 ```text
-AI Client (MCP)
-  │ stdio (JSON-RPC 2.0)
-  ▼
-apps/claude-plugin  ──── or ────  apps/cursor-plugin
-  │ startup: ensures Chrome + daemon are running
-  │ WebSocket :51520 (JSON-RPC 2.0)
-  ▼
-apps/daemon  (WebSocket hub, auth, routing)
-  │
-  ▼
-packages/browser-tools / DirectCDPAdapter
-  │ per-tab CDP WebSocket :9222
-  ▼
-Chrome browser
+AI Client (MCP/stdio)
+  |
+  v
+navora-claude-plugin / navora-cursor-plugin
+  |
+  +-- Extension path (Native Messaging):
+  |     daemon <-> nm-shim <-> Chrome extension <-> Chrome
+  |
+  +-- CDP path (developer):
+        daemon <-> DirectCDPAdapter <-> Chrome :9222
 ```
+
+**Extension path** routes tool calls through the Navora Chrome extension via Native Messaging. The extension runs in the browser context with full page access, so no debug port is needed.
+
+**CDP path** connects directly to Chrome's DevTools Protocol. Simpler setup, but requires starting Chrome with `--remote-debugging-port`.
 
 The daemon is a lightweight Node.js process that:
 - Accepts WebSocket connections from plugin clients (token-authenticated)
-- Maintains a per-tab CDP connection pool
-- Routes `tools/call` requests to the correct tab's `CommandExecutor`
+- Routes `tools/call` requests to the correct tab's executor
 - Enforces a single-instance guarantee via lockfile
-
-The full dispatcher pipeline (permissions, rate limiting, SQLite persistence) is available in `apps/daemon/src/dispatcher/` and can be wired in for production use cases.
-
-### Package layout
-
-| Package | Role |
-|---------|------|
-| `apps/claude-plugin` | MCP server for Claude Code |
-| `apps/cursor-plugin` | MCP server for Cursor (shares claude-plugin source) |
-| `apps/daemon` | WebSocket hub + CDP routing daemon |
-| `apps/extension` | Chrome MV3 extension (alternative transport via Native Messaging) |
-| `packages/browser-tools` | `BrowserAdapter` interface, `DirectCDPAdapter`, `CommandExecutor` |
-| `packages/mcp` | `MCPServerBuilder` / `MCPServer` — JSON-RPC 2.0 over stdio |
-| `packages/protocol` | Wire types: `NMMessage`, `NMEnvelope`, `WSMessage` |
-| `packages/shared` | `Result<T,E>`, `Logger`, ULID, redaction helpers |
 
 ---
 
@@ -159,11 +182,11 @@ pnpm --filter @navora/cursor-plugin build
 
 ## Environment variables
 
-### Daemon and Claude plugin
+### Daemon and plugin
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NAVORA_CDP_PORT` | `9222` | Chrome remote debugging port (plugin probes `9222`–`9224` unless overridden) |
+| `NAVORA_CDP_PORT` | `9222` | Chrome remote debugging port |
 | `NAVORA_DAEMON_PORT` | `51520` | Daemon WebSocket port |
 | `NAVORA_DAEMON_HOST` | `127.0.0.1` | Daemon host |
 | `NAVORA_AUTH_SECRET` | `dev-secret-change-in-production` | Token signing secret |
@@ -171,16 +194,15 @@ pnpm --filter @navora/cursor-plugin build
 | `NAVORA_PROFILE_ID` | `default` | Profile ID for multi-profile routing |
 | `NAVORA_DEBUG` | — | Set to `1` to enable daemon debug logging |
 
-### Native Messaging shim (`nm-shim`, extension → daemon)
+### Native Messaging shim (extension path)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NAVORA_RUNTIME_TOKEN` | — | Required WebSocket auth token for shim → daemon |
 | `NAVORA_RUNTIME_HOST` | `127.0.0.1` | Daemon host |
 | `NAVORA_RUNTIME_PORT` | `51520` | Daemon WebSocket port |
-| `NAVORA_RUNTIME_LOCKDIR` | — | Lockfile directory (optional; default under system temp) |
+| `NAVORA_RUNTIME_LOCKDIR` | — | Lockfile directory (default: system temp) |
 | `NAVORA_RUNTIME_DAEMON_PATH` | `dist/index.js` | Override path when spawning the daemon |
-| `NAVORA_RUNTIME_MODE` | — | Internal: marks subprocess spawned as daemon |
 
 ---
 

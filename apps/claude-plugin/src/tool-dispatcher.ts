@@ -84,15 +84,16 @@ export const TOOLS = [
   },
   {
     name: 'browser_wait_for',
-    description: 'Wait for a CSS selector to appear in the DOM.',
+    description: 'Wait for a CSS selector or text content to appear in the page. Provide either selector or text, not both.',
     inputSchema: {
       type: 'object' as const,
       properties: {
         selector: { type: 'string', description: 'CSS selector to wait for' },
+        text: { type: 'string', description: 'Text to wait for in page body' },
+        caseSensitive: { type: 'boolean', description: 'Case-sensitive text match (default: false)' },
         timeout: { type: 'number', description: 'Max wait in ms (default: 5000)' },
         tabId: { type: 'number', description: 'Tab ID (optional)' },
       },
-      required: ['selector'],
     },
   },
   {
@@ -234,9 +235,12 @@ export async function callTool(name: string, args: ToolArgs): Promise<unknown> {
       return browser.scroll(selector, deltaY, tabId);
     }
     case 'browser_wait_for': {
-      const selector = String(args['selector'] ?? '');
+      const text = typeof args['text'] === 'string' ? args['text'] : undefined;
+      const selector = typeof args['selector'] === 'string' ? args['selector'] : undefined;
       const timeout = typeof args['timeout'] === 'number' ? args['timeout'] : undefined;
-      return browser.waitForSelector(selector, timeout, tabId);
+      const caseSensitive = typeof args['caseSensitive'] === 'boolean' ? args['caseSensitive'] : undefined;
+      if (text) return browser.waitForText(text, timeout, caseSensitive, tabId);
+      return browser.waitForSelector(selector ?? '', timeout, tabId);
     }
     case 'browser_execute_script': {
       const source = String(args['source'] ?? '');
