@@ -18,8 +18,6 @@
  * - NAVORA_RUNTIME_LOCKDIR: Lockfile directory (default: temp/ai-browser-runtime)
  */
 
-import * as readline from "readline";
-import { WebSocket } from "ws";
 
 // Import shared framing
 export { readLengthPrefix, frameMessage } from "./framing";

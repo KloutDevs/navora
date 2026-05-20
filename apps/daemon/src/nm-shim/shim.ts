@@ -20,15 +20,11 @@ import WebSocket from "ws";
 import { parseConfig, type ShimConfig } from "./index";
 import {
   readLengthPrefix,
-  isCompleteMessage,
-  extractMessage,
   frameMessage,
   headerSize,
-  maxMessageSize,
 } from "./framing";
 import {
   ShimLockfileManager,
-  connectToDaemon,
   spawnDaemon,
   waitForDaemonReady,
 } from "./daemon-connector";

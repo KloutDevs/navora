@@ -4,7 +4,7 @@
 
 import Database from "better-sqlite3";
 import type { Logger } from "@navora/shared";
-import { ok, err, type Result, isOk } from "@navora/shared";
+import { ok, err, type Result } from "@navora/shared";
 import { createBlobStore, type BlobStore, type BlobMetadata, type BlobKind, createNoOpLogger } from "./blob-store";
 import { createRetentionWorker, type RetentionWorker } from "./retention-worker";
 import { runMigrations, getDatabaseVersion } from "./migrations";

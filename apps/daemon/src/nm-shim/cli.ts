@@ -75,6 +75,7 @@ async function isDaemonRunning(lockDir: string): Promise<boolean> {
     const data = JSON.parse(content) as LockfileData;
     if (process.platform === "win32") {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
         require("child_process").execSync(`tasklist /FI "PID eq ${data.pid}" /NH`, { stdio: "pipe" });
         return true;
       } catch {
@@ -93,6 +94,7 @@ async function isDaemonRunning(lockDir: string): Promise<boolean> {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function waitForDaemon(host: string, port: number, token: string, timeoutMs: number): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -123,7 +125,7 @@ async function runShim(): Promise<void> {
   }
 
   const lockDir = config.lockDir || path.join(os.tmpdir(), "ai-browser-runtime");
-  const lockFilename = "daemon.pid";
+  const _lockFilename = "daemon.pid";
 
   console.error(`[shim] Starting... daemon at ${config.host}:${config.port}`);
 

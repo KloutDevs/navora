@@ -7,10 +7,6 @@ import {
   isCDPError,
   type BrowserAdapter,
   type ToolResult,
-  type TabInfo,
-  type DomResult,
-  type ScriptResult,
-  type ConsoleEntry,
 } from "@navora/browser-tools";
 import type { Logger } from "@navora/shared";
 import { ok, err, isOk, isError, type Result } from "@navora/shared";

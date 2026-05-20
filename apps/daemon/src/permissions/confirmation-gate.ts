@@ -175,7 +175,7 @@ export class ConfirmationGate {
     );
 
     let cancelled = 0;
-    for (const [id, pending] of toCancel) {
+    for (const [id] of toCancel) {
       const timer = this.timers.get(id);
       if (timer) {
         clearTimeout(timer);

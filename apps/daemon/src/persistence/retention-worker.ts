@@ -3,7 +3,7 @@
  */
 
 import type { Logger } from "@navora/shared";
-import { createBlobStore, type BlobStore } from "./blob-store";
+import type { BlobStore } from "./blob-store";
 
 export interface RetentionConfig {
   /** Interval between retention checks (default: 1 hour) */

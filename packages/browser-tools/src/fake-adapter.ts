@@ -142,7 +142,7 @@ export class FakeAdapter implements BrowserAdapter {
     };
   }
 
-  async extractDom(tabId?: number): Promise<Result<DomResult, Error>> {
+  async extractDom(_tabId?: number): Promise<Result<DomResult, Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
     if (this.shouldFail) return { ok: false, error: new Error("FakeAdapter: simulated extractDom failure") };
 
@@ -159,7 +159,7 @@ export class FakeAdapter implements BrowserAdapter {
     };
   }
 
-  async extractText(tabId?: number): Promise<Result<string, Error>> {
+  async extractText(_tabId?: number): Promise<Result<string, Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
     return { ok: true, value: "Sample extracted text from page" };
   }
@@ -228,14 +228,14 @@ export class FakeAdapter implements BrowserAdapter {
     };
   }
 
-  async takeScreenshot(tabId?: number): Promise<Result<string, Error>> {
+  async takeScreenshot(_tabId?: number): Promise<Result<string, Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
     if (this.shouldFail) return { ok: false, error: new Error("FakeAdapter: simulated screenshot failure") };
     // Return a base64-encoded 1x1 transparent PNG
     return { ok: true, value: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" };
   }
 
-  async getConsoleLogs(tabId?: number): Promise<Result<ConsoleEntry[], Error>> {
+  async getConsoleLogs(_tabId?: number): Promise<Result<ConsoleEntry[], Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
     return { ok: true, value: this.consoleLogs };
   }
@@ -260,9 +260,8 @@ export class FakeAdapter implements BrowserAdapter {
     return { ok: true, value: [...this.cookies] };
   }
 
-  async executeScript(source: string, tabId?: number): Promise<Result<ScriptResult, Error>> {
+  async executeScript(source: string, _tabId?: number): Promise<Result<ScriptResult, Error>> {
     if (this.disposed) return { ok: false, error: new Error("Adapter disposed") };
-    const target = tabId ?? this.activeTabId;
 
     // Simulate script execution
     try {

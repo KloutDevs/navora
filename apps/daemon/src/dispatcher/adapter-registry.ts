@@ -5,7 +5,7 @@
 
 import type { BrowserAdapter, BrowserAdapterEventListener } from "@navora/browser-tools";
 import type { Logger } from "@navora/shared";
-import { ok, err, isOk, isError, type Result } from "@navora/shared";
+import { ok, err, isError, type Result } from "@navora/shared";
 
 export interface AdapterRegistryConfig {
   /** Default timeout for adapter operations (ms) */

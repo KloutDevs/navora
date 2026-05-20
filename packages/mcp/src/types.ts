@@ -39,7 +39,7 @@ export interface ToolOutputSchema {
 }
 
 /** Tool definition - describes a callable tool */
-export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
+export interface ToolDefinition {
   /** Unique tool name */
   name: string;
   /** Human-readable description */

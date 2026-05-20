@@ -7,7 +7,7 @@ import { createHmac } from "node:crypto";
 import { EventEmitter } from "events";
 import type { IncomingMessage } from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
-import { parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type JSONRPCRequest, JSONRPCErrorCode } from "@navora/mcp";
+import { parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type JSONRPCRequest } from "@navora/mcp";
 import { generate } from "@navora/shared";
 
 export interface ShimConnectedPayload {

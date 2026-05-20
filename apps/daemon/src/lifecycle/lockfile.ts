@@ -90,6 +90,7 @@ export class LockfileManager {
   private async isProcessRunning(pid: number): Promise<boolean> {
     try {
       if (process.platform === "win32") {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
         const { execSync } = require("child_process");
         try {
           // tasklist exits 0 even when the PID doesn't exist — must check output

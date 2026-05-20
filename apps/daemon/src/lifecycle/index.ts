@@ -3,9 +3,8 @@
  * Daemon entry point, state management, graceful shutdown
  */
 
-import { LockfileManager, createLockfileManager, type LockfileData } from "./lockfile";
+import { createLockfileManager, type LockfileData } from "./lockfile";
 import type { WebSocketHub, ShimConnectedPayload } from "../transport/websocket";
-import type { StdioTransport } from "../transport/stdio";
 import type { BrowserAdapter } from "@navora/browser-tools";
 import { NMAdapter } from "@navora/browser-tools";
 import { isOk } from "@navora/shared";

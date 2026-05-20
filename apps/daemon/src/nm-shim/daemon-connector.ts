@@ -69,6 +69,7 @@ export class ShimLockfileManager {
       // Check if process is still running
       if (process.platform === "win32") {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { execSync } = require("child_process") as typeof import("child_process");
           execSync(`tasklist /FI "PID eq ${data.pid}" /NH`, { stdio: "pipe" });
           return true;
@@ -153,11 +154,11 @@ export function spawnDaemon(
     detached: false,
   });
 
-  child.on("exit", (code, signal) => {
+  child.on("exit", (code, _signal) => {
     onExit(code);
   });
 
-  child.on("error", (error) => {
+  child.on("error", (_error) => {
     onExit(null);
   });
 

@@ -3,7 +3,7 @@
  * Implements the stdio transport for MCP server communication
  */
 
-import { MCPServer, MCPServerBuilder, parseJSONRPCRequest, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type MCPServerOptions, type JSONRPCRequest } from "@navora/mcp";
+import { MCPServer, MCPServerBuilder, parseJSONRPCBatchRequest, serializeJSONRPCResponse, type MCPServerOptions } from "@navora/mcp";
 
 /**
  * Stdio transport options

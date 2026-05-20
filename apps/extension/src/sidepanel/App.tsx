@@ -69,7 +69,6 @@ function HUDModal({ confirmation }: { confirmation: ConfirmationRequest }) {
       });
     }, 1000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmation.id]);
 
   function respond(approved: boolean) {

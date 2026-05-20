@@ -4,7 +4,6 @@
  */
 
 import type { TabInfo } from "../adapter";
-import type { Result } from "@navora/shared";
 
 export interface TabManagerOptions {
   /** Emit tabs_changed events */

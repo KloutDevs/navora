@@ -4,7 +4,7 @@
  */
 
 import type { Logger } from "@navora/shared";
-import { ok, err, type Result, isOk } from "@navora/shared";
+import { ok, type Result } from "@navora/shared";
 
 export interface RateLimiterConfig {
   /** Maximum requests per window */

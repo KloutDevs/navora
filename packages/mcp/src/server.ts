@@ -21,12 +21,10 @@ import type { Result } from "@navora/shared";
 import {
   createJSONRPCSuccessResponse,
   createMethodNotFoundResponse,
-  createInvalidParamsResponse,
   createInternalErrorResponse,
   createInvalidRequestResponse,
   JSONRPCErrorCode,
   serializeJSONRPCResponse,
-  serializeJSONRPCBatchResponse,
   parseJSONRPCRequest,
   type JSONRPCRequest,
   type JSONRPCResponse,

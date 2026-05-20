@@ -160,7 +160,7 @@ export class SqlitePermissionStore {
 
     // If not found, try upgrading scope (safe allows mutating)
     if (check.scope === "mutating") {
-      const safeResult = this.persistence.isPermissionGranted(
+      const _safeResult = this.persistence.isPermissionGranted(
         check.profileId,
         check.tool,
         check.origin

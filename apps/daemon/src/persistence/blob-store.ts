@@ -4,7 +4,7 @@
 
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync, statSync } from "fs";
-import { join, extname } from "path";
+import { join } from "path";
 import type { Logger } from "@navora/shared";
 import { ok, err, type Result } from "@navora/shared";
 

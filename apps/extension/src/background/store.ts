@@ -2,7 +2,6 @@
  * Extension State Store using Zustand
  */
 
-import { create as createZustandStore } from 'zustand';
 import type { ExtensionState, ConnectionStatus, DomainAllowlist } from '../shared/types';
 
 interface ExtensionStore {
