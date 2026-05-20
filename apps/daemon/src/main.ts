@@ -21,11 +21,6 @@ const AUTH_SECRET = process.env["NAVORA_AUTH_SECRET"] ?? "dev-secret-change-in-p
 const registry = createAdapterRegistry();
 
 const cdpAdapter = new DirectCDPAdapter({ cdpPort: CDP_PORT });
-const cdpInit = await cdpAdapter.initialize();
-if (!isOk(cdpInit)) {
-  console.warn(`[daemon] CDP adapter init warning: ${cdpInit.error.message}`);
-}
-
 const cdpReg = registry.register(`cdp:${CDP_PORT}`, cdpAdapter);
 if (!isOk(cdpReg)) {
   console.warn(`[daemon] Could not register CDP adapter: ${cdpReg.error.message}`);
