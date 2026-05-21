@@ -618,7 +618,4 @@ async function main(): Promise<void> {
   outro('Listo. Reiniciá el IDE si cambiaste la configuración MCP.');
 }
 
-main().catch((e) => {
-  console.error(e instanceof Error ? e.message : String(e));
-  process.exit(1);
-});
+export { main };

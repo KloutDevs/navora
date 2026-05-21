@@ -287,7 +287,7 @@ function httpOk(url: string): Promise<boolean> {
  * Evita que un lockfile desactualizado impida que el daemon arranque.
  */
 export async function clearStaleDaemonLockfile(): Promise<void> {
-  const lockPath = join(tmpdir(), 'ai-browser-runtime', 'daemon.pid');
+  const lockPath = join(tmpdir(), 'navora', 'daemon.pid');
   try {
     const { readFile, unlink } = await import('node:fs/promises');
     const content = await readFile(lockPath, 'utf8');
@@ -316,7 +316,7 @@ function isPidAlive(pid: number): Promise<boolean> {
  * - Modo npm:   `npx -y navora-daemon`
  * Stderr se redirige a un archivo de log para diagnóstico.
  */
-export const DAEMON_LOG_PATH = join(tmpdir(), 'ai-browser-runtime', 'daemon.log');
+export const DAEMON_LOG_PATH = join(tmpdir(), 'navora', 'daemon.log');
 
 export function startDaemon(): void {
   const local = resolveLocalPluginPaths();

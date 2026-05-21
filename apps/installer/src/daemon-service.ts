@@ -75,13 +75,14 @@ const WIN_CONFIG_DIR = join(homedir(), 'AppData', 'Local', 'Navora');
 const WIN_CONFIG_FILE = join(WIN_CONFIG_DIR, 'config.json');
 
 interface WinConfig {
-  nodePath: string;
-  daemonPath: string;
+  mode?: 'local' | 'npx';
+  nodePath?: string;
+  daemonPath?: string;
 }
 
-function writeWinConfig(nodePath: string, daemonPath: string): void {
+function writeWinConfig(cfg: WinConfig): void {
   mkdirSync(WIN_CONFIG_DIR, { recursive: true });
-  writeFileSync(WIN_CONFIG_FILE, JSON.stringify({ nodePath, daemonPath }, null, 2), 'utf8');
+  writeFileSync(WIN_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8');
   dbg(`config written: ${WIN_CONFIG_FILE}`);
 }
 
@@ -93,23 +94,31 @@ function readWinConfig(): WinConfig | null {
   }
 }
 
-/** Writes a .bat for the registry Run key (auto-start at logon). */
+/** Writes a .bat for local mode (node + daemonPath). */
 function writeBatWrapper(nodePath: string, daemonPath: string): string {
   mkdirSync(WIN_CONFIG_DIR, { recursive: true });
   const bat = join(WIN_CONFIG_DIR, 'navora-daemon.bat');
-  // /B runs in the same console (no new window), mshta trick not needed
   writeFileSync(
     bat,
     `@echo off\r\nstart "" /B "${nodePath}" "${daemonPath}"\r\n`,
     'utf8'
   );
-  dbg(`bat wrapper: ${bat}`);
+  dbg(`bat wrapper (local): ${bat}`);
+  return bat;
+}
+
+/** Writes a .bat for npx mode. */
+function writeBatWrapperNpx(): string {
+  mkdirSync(WIN_CONFIG_DIR, { recursive: true });
+  const bat = join(WIN_CONFIG_DIR, 'navora-daemon.bat');
+  writeFileSync(bat, '@echo off\r\nstart "" /B npx -y navora-daemon\r\n', 'utf8');
+  dbg(`bat wrapper (npx): ${bat}`);
   return bat;
 }
 
 /** Removes a stale lockfile if the recorded PID is no longer alive. */
 function clearStaleLockfileSync(): void {
-  const lockPath = join(tmpdir(), 'ai-browser-runtime', 'daemon.pid');
+  const lockPath = join(tmpdir(), 'navora', 'daemon.pid');
   try {
     const data = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid: number };
     const out = tryRun('tasklist', ['/FI', `PID eq ${data.pid}`, '/NH']);
@@ -126,7 +135,7 @@ function clearStaleLockfileSync(): void {
 /** Checks if a daemon process is currently running via lockfile PID. */
 function isDaemonProcessRunning(): boolean {
   try {
-    const lockPath = join(tmpdir(), 'ai-browser-runtime', 'daemon.pid');
+    const lockPath = join(tmpdir(), 'navora', 'daemon.pid');
     const data = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid: number };
     if (platform() === 'win32') {
       // tasklist exits 0 even when the PID doesn't exist — must check output
@@ -204,23 +213,22 @@ export function getServiceStatus(): ServiceStatus {
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 
-export function installService(daemonPath: string): void {
+export function installService(daemonPath?: string): void {
   const os = platform();
   const node = process.execPath;
-  dbg(`installService on ${os}, node=${node}, daemon=${daemonPath}`);
+  const mode = daemonPath ? 'local' : 'npx';
+  dbg(`installService on ${os}, mode=${mode}, daemon=${daemonPath ?? 'npx'}`);
 
   if (os === 'win32') {
-    // Save config for startService to re-use
-    writeWinConfig(node, daemonPath);
-    // bat uses "start /B" so no window appears on logon
-    const bat = writeBatWrapper(node, daemonPath);
-    run('reg', [
-      'add', WIN_RUN_KEY,
-      '/v', WIN_RUN_VALUE,
-      '/t', 'REG_SZ',
-      '/d', bat,
-      '/f',
-    ]);
+    if (daemonPath) {
+      writeWinConfig({ mode: 'local', nodePath: node, daemonPath });
+      const bat = writeBatWrapper(node, daemonPath);
+      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
+    } else {
+      writeWinConfig({ mode: 'npx' });
+      const bat = writeBatWrapperNpx();
+      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
+    }
     return;
   }
 
@@ -228,14 +236,17 @@ export function installService(daemonPath: string): void {
     const dir = join(homedir(), '.config', 'systemd', 'user');
     mkdirSync(dir, { recursive: true });
     const unitFile = join(dir, `${SERVICE_NAME}.service`);
+    const execStart = daemonPath
+      ? `ExecStart="${node}" "${daemonPath}"`
+      : 'ExecStart=npx -y navora-daemon';
     const content = [
       '[Unit]',
-      'Description=Navora Browser Runtime Daemon',
+      'Description=Navora Daemon',
       'After=network.target',
       '',
       '[Service]',
       'Type=simple',
-      `ExecStart="${node}" "${daemonPath}"`,
+      execStart,
       'Restart=on-failure',
       'RestartSec=5',
       `StandardOutput=append:${join(homedir(), '.navora-daemon.log')}`,
@@ -255,6 +266,13 @@ export function installService(daemonPath: string): void {
     const plist = launchAgentPath();
     const logFile = join(homedir(), '.navora-daemon.log');
     mkdirSync(join(homedir(), 'Library', 'LaunchAgents'), { recursive: true });
+    const programArgs = daemonPath
+      ? [`    <string>${node}</string>`, `    <string>${daemonPath}</string>`].join('\n')
+      : [
+          '    <string>npx</string>',
+          '    <string>-y</string>',
+          '    <string>navora-daemon</string>',
+        ].join('\n');
     const content = [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"',
@@ -264,8 +282,7 @@ export function installService(daemonPath: string): void {
       `  <key>Label</key><string>${SERVICE_NAME}</string>`,
       '  <key>ProgramArguments</key>',
       '  <array>',
-      `    <string>${node}</string>`,
-      `    <string>${daemonPath}</string>`,
+      programArgs,
       '  </array>',
       '  <key>RunAtLoad</key><true/>',
       '  <key>KeepAlive</key><true/>',
@@ -289,16 +306,12 @@ export function startService(_daemonPath?: string): void {
   dbg(`startService on ${os}`);
 
   if (os === 'win32') {
-    // Clear any stale lockfile so the new instance can acquire it
     clearStaleLockfileSync();
-    // Kill any process holding the daemon port (zombie from previous run)
     const daemonPort = Number(process.env['NAVORA_DAEMON_PORT'] ?? 51520);
     killPortOwner(daemonPort);
-    // Spawn node directly — no cmd.exe intermediary, no visible window
     const cfg = readWinConfig();
     if (!cfg) throw new Error('Servicio no instalado (config no encontrado).');
-    dbg(`spawning node directly: ${cfg.nodePath} ${cfg.daemonPath}`);
-    const logDir = join(tmpdir(), 'ai-browser-runtime');
+    const logDir = join(tmpdir(), 'navora');
     mkdirSync(logDir, { recursive: true });
     const logPath = join(logDir, 'daemon.log');
     let errFd = -1;
@@ -306,13 +319,25 @@ export function startService(_daemonPath?: string): void {
     const stdio: ['ignore', 'ignore', number] | 'ignore' = errFd >= 0
       ? ['ignore', 'ignore', errFd]
       : 'ignore';
-    const child = spawn(cfg.nodePath, [cfg.daemonPath], {
-      detached: true,
-      stdio,
-      windowsHide: true,
-      env: { ...process.env },
-    });
-    child.unref();
+    if (cfg.mode === 'npx' || !cfg.nodePath || !cfg.daemonPath) {
+      dbg('spawning via npx');
+      const child = spawn('npx.cmd', ['-y', 'navora-daemon'], {
+        detached: true,
+        stdio,
+        windowsHide: true,
+        env: { ...process.env },
+      });
+      child.unref();
+    } else {
+      dbg(`spawning node directly: ${cfg.nodePath} ${cfg.daemonPath}`);
+      const child = spawn(cfg.nodePath, [cfg.daemonPath], {
+        detached: true,
+        stdio,
+        windowsHide: true,
+        env: { ...process.env },
+      });
+      child.unref();
+    }
     if (errFd >= 0) { try { closeSync(errFd); } catch { /* ignore */ } }
   } else if (os === 'linux') {
     run('systemctl', ['--user', 'start', SERVICE_NAME]);
@@ -327,7 +352,7 @@ export function stopService(): void {
 
   if (os === 'win32') {
     try {
-      const lockPath = join(tmpdir(), 'ai-browser-runtime', 'daemon.pid');
+      const lockPath = join(tmpdir(), 'navora', 'daemon.pid');
       const data = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid: number };
       dbg(`killing daemon PID ${data.pid}`);
       tryRun('taskkill', ['/PID', String(data.pid), '/F']);

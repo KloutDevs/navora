@@ -19,8 +19,8 @@ import { execSync } from 'node:child_process';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const NM_HOST_NAME = 'com.ai-browser-runtime.nm';
-export const NM_HOST_DESCRIPTION = 'Navora AI Browser Runtime Native Messaging Host';
+export const NM_HOST_NAME = 'com.navora.nm';
+export const NM_HOST_DESCRIPTION = 'Navora Native Messaging Host';
 
 // ─── Browser profiles ─────────────────────────────────────────────────────────
 

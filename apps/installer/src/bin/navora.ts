@@ -1,26 +1,12 @@
-/**
- * Shim de entrada para el CLI navora.
- *
- * Usa ÚNICAMENTE node: built-ins y dynamic import() para evitar que el
- * empaquetador arrastre TUI/clack al tiempo de arranque del comando doctor.
- *
- * Dispatch:
- *   navora doctor          → dynamic import de ../doctor.js
- *   navora --version | -v  → imprime versión y sale con 0
- *   navora --help | -h     → imprime uso y sale con 0
- *   navora (sin args)      → dynamic import de ../index.js  (activa el TUI)
- */
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 function readVersion(): string {
   try {
     const require = createRequire(import.meta.url);
-    const pkgPath = join(__dirname, '..', '..', 'package.json');
+    const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'package.json');
     const pkg = require(pkgPath) as { version?: string };
     return pkg.version ?? '0.0.0';
   } catch {
@@ -28,26 +14,27 @@ function readVersion(): string {
   }
 }
 
+if (!process.env['NAVORA_DEBUG'] && process.argv.includes('--debug')) {
+  process.env['NAVORA_DEBUG'] = '1';
+}
+
 const USAGE = `\
-navora — Navora AI Browser Runtime
+navora — Navora Browser Runtime
 
 Usage:
-  navora                    Launch interactive TUI installer
-  navora doctor             Environment health check
-                              exit 0 = daemon reachable (healthy)
-                              exit 1 = daemon unreachable (unhealthy)
-  navora doctor --debug     Health check with verbose output
-  navora --version          Print version
-  navora --help             Show this help
-
-Notes:
-  Chrome remote debugging (CDP) is only required for developer tools
-  (cdp_evaluate, cdp_send_command, cdp_network_har). Standard browser
-  tools work through the Navora extension via Native Messaging.
+  navora                          Wizard de configuración paso a paso
+  navora status                   Muestra el estado actual (exit 0 = todo OK)
+  navora doctor                   Diagnóstico de conexión
+  navora daemon install           Instala el daemon como servicio del sistema
+  navora daemon start             Inicia el daemon
+  navora daemon stop              Detiene el daemon
+  navora daemon uninstall         Desinstala el servicio del daemon
+  navora --version                Imprime la versión
+  navora --help                   Muestra esta ayuda
 `;
 
 async function main(): Promise<void> {
-  const [, , cmd] = process.argv;
+  const [, , cmd, subcmd] = process.argv;
 
   if (cmd === '--version' || cmd === '-v') {
     console.log(readVersion());
@@ -61,12 +48,22 @@ async function main(): Promise<void> {
 
   if (cmd === 'doctor') {
     const { runDoctor } = await import('../doctor.js');
-    const code = await runDoctor();
-    process.exit(code);
+    process.exit(await runDoctor());
   }
 
-  // Sin args o cualquier otro subcomando → activar TUI
-  await import('../index.js');
+  if (cmd === 'status') {
+    const { runStatus } = await import('../wizard.js');
+    process.exit(await runStatus());
+  }
+
+  if (cmd === 'daemon') {
+    const { runDaemonCmd } = await import('../wizard.js');
+    process.exit(await runDaemonCmd(subcmd ?? ''));
+  }
+
+  // Sin args o comando desconocido → wizard interactivo
+  const { runWizard } = await import('../wizard.js');
+  await runWizard();
 }
 
 main().catch((e: unknown) => {
