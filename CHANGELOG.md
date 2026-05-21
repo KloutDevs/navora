@@ -11,6 +11,20 @@ _Next focus: v0.3 tool parity — hover, drag, form fill, network capture, acces
 
 ---
 
+## [0.3.2] — 2026-05-21
+
+### Fixed
+
+**Installer — service startup fails when npx is not in system PATH**
+- `resolveNpxPath()` resolves the absolute path to `npx` (or `npx.cmd` on Windows) at install time, using the same Node installation running the installer. This path is baked into the bat wrapper, systemd unit, and launchd plist — so services that start without the user's shell PATH (Registry Run, systemd --user, launchd) can still find `npx`.
+- Windows bat wrapper now uses the full quoted path: `"C:\...\npx.cmd" -y navora-daemon` instead of bare `npx`.
+- systemd unit uses `ExecStart="/full/path/to/npx" -y navora-daemon` instead of bare `npx`.
+- macOS plist uses the full path in `ProgramArguments` instead of bare `npx`.
+- `startService()` Windows npx spawn reads the stored npx path from `config.json` (`cfg.nodePath`) and falls back to `resolveNpxPath()` if missing.
+- Closes #1.
+
+---
+
 ## [0.3.1] — 2026-05-21
 
 ### Changed

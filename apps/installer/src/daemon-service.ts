@@ -8,7 +8,7 @@
 
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir, platform, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -107,13 +107,33 @@ function writeBatWrapper(nodePath: string, daemonPath: string): string {
   return bat;
 }
 
-/** Writes a .bat for npx mode. */
-function writeBatWrapperNpx(): string {
+/** Writes a .bat for npx mode — uses the full path to npx.cmd resolved at install time. */
+function writeBatWrapperNpx(npxPath: string): string {
   mkdirSync(WIN_CONFIG_DIR, { recursive: true });
   const bat = join(WIN_CONFIG_DIR, 'navora-daemon.bat');
-  writeFileSync(bat, '@echo off\r\nstart "" /B npx -y navora-daemon\r\n', 'utf8');
-  dbg(`bat wrapper (npx): ${bat}`);
+  writeFileSync(bat, `@echo off\r\nstart "" /B "${npxPath}" -y navora-daemon\r\n`, 'utf8');
+  dbg(`bat wrapper (npx): ${bat} using ${npxPath}`);
   return bat;
+}
+
+/**
+ * Resolves the absolute path to npx at install time, using the same Node
+ * installation that is running the installer. Services (Registry Run, systemd,
+ * launchd) start with a minimal PATH that often does NOT include npm global
+ * bin, so we must bake the full path rather than relying on PATH at runtime.
+ */
+function resolveNpxPath(): string {
+  const nodeDir = dirname(process.execPath);
+  const candidate = platform() === 'win32'
+    ? join(nodeDir, 'npx.cmd')
+    : join(nodeDir, 'npx');
+  if (existsSync(candidate)) {
+    dbg(`resolved npx: ${candidate}`);
+    return candidate;
+  }
+  // Fallback: hope PATH is available (nvm global installs, etc.)
+  dbg(`npx not found next to node (${candidate}), falling back to name-only`);
+  return platform() === 'win32' ? 'npx.cmd' : 'npx';
 }
 
 /** Removes a stale lockfile if the recorded PID is no longer alive. */
@@ -225,8 +245,9 @@ export function installService(daemonPath?: string): void {
       const bat = writeBatWrapper(node, daemonPath);
       run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
     } else {
-      writeWinConfig({ mode: 'npx' });
-      const bat = writeBatWrapperNpx();
+      const npx = resolveNpxPath();
+      writeWinConfig({ mode: 'npx', nodePath: npx });
+      const bat = writeBatWrapperNpx(npx);
       run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
     }
     return;
@@ -236,9 +257,10 @@ export function installService(daemonPath?: string): void {
     const dir = join(homedir(), '.config', 'systemd', 'user');
     mkdirSync(dir, { recursive: true });
     const unitFile = join(dir, `${SERVICE_NAME}.service`);
+    const npx = resolveNpxPath();
     const execStart = daemonPath
       ? `ExecStart="${node}" "${daemonPath}"`
-      : 'ExecStart=npx -y navora-daemon';
+      : `ExecStart="${npx}" -y navora-daemon`;
     const content = [
       '[Unit]',
       'Description=Navora Daemon',
@@ -266,10 +288,11 @@ export function installService(daemonPath?: string): void {
     const plist = launchAgentPath();
     const logFile = join(homedir(), '.navora-daemon.log');
     mkdirSync(join(homedir(), 'Library', 'LaunchAgents'), { recursive: true });
+    const npx = resolveNpxPath();
     const programArgs = daemonPath
       ? [`    <string>${node}</string>`, `    <string>${daemonPath}</string>`].join('\n')
       : [
-          '    <string>npx</string>',
+          `    <string>${npx}</string>`,
           '    <string>-y</string>',
           '    <string>navora-daemon</string>',
         ].join('\n');
@@ -320,8 +343,10 @@ export function startService(_daemonPath?: string): void {
       ? ['ignore', 'ignore', errFd]
       : 'ignore';
     if (cfg.mode === 'npx' || !cfg.nodePath || !cfg.daemonPath) {
-      dbg('spawning via npx');
-      const child = spawn('npx.cmd', ['-y', 'navora-daemon'], {
+      // cfg.nodePath stores the resolved npx path when mode === 'npx'
+      const npxBin = cfg.nodePath ?? resolveNpxPath();
+      dbg(`spawning via npx: ${npxBin}`);
+      const child = spawn(npxBin, ['-y', 'navora-daemon'], {
         detached: true,
         stdio,
         windowsHide: true,

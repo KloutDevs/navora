@@ -4,7 +4,7 @@ Navora is a browser automation **runtime** for AI agents — not a thin proxy.
 The distinction matters: a runtime has state, identity, memory, and policy.
 A proxy has none of those. This roadmap is built around that moat.
 
-## Where we are today (v0.3.1)
+## Where we are today (v0.3.2)
 
 - 13 core browser tools + 3 raw CDP tools (`browser_wait_for` now accepts text content matching)
 - Daemon WebSocket hub with per-tab CDP connection pool
