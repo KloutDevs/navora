@@ -1,6 +1,6 @@
 {
   "name": "navora",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Instalador TUI para Navora AI Browser Runtime (Claude Code, Cursor, verificación)",
   "type": "module",
   "bin": {

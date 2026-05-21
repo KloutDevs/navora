@@ -11,6 +11,15 @@ _Next focus: v0.3 tool parity — hover, drag, form fill, network capture, acces
 
 ---
 
+## [0.3.3] — 2026-05-21
+
+### Fixed
+
+**Installer — terminal window opens at login on Windows**
+- Registry Run key previously pointed to a `.bat` file. Windows always opens a `cmd.exe` window to interpret `.bat` scripts, even with `start /B` inside. Replaced the bat wrapper with a `.vbs` launcher invoked via `wscript.exe /nologo`. VBScript's `WshShell.Run` with window style `0` (`SW_HIDE`) starts the daemon completely silently — no terminal flicker at login.
+
+---
+
 ## [0.3.2] — 2026-05-21
 
 ### Fixed

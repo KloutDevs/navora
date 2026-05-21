@@ -94,26 +94,28 @@ function readWinConfig(): WinConfig | null {
   }
 }
 
-/** Writes a .bat for local mode (node + daemonPath). */
-function writeBatWrapper(nodePath: string, daemonPath: string): string {
+/**
+ * Writes a VBScript launcher so the Registry Run key starts the daemon
+ * with window style SW_HIDE (0) — no cmd.exe window ever appears.
+ * A .bat file opened via Registry Run always spawns a visible cmd.exe;
+ * wscript.exe /nologo with style 0 is the standard workaround.
+ */
+function writeVbsWrapper(command: string, args: string[]): string {
   mkdirSync(WIN_CONFIG_DIR, { recursive: true });
-  const bat = join(WIN_CONFIG_DIR, 'navora-daemon.bat');
-  writeFileSync(
-    bat,
-    `@echo off\r\nstart "" /B "${nodePath}" "${daemonPath}"\r\n`,
-    'utf8'
-  );
-  dbg(`bat wrapper (local): ${bat}`);
-  return bat;
-}
-
-/** Writes a .bat for npx mode — uses the full path to npx.cmd resolved at install time. */
-function writeBatWrapperNpx(npxPath: string): string {
-  mkdirSync(WIN_CONFIG_DIR, { recursive: true });
-  const bat = join(WIN_CONFIG_DIR, 'navora-daemon.bat');
-  writeFileSync(bat, `@echo off\r\nstart "" /B "${npxPath}" -y navora-daemon\r\n`, 'utf8');
-  dbg(`bat wrapper (npx): ${bat} using ${npxPath}`);
-  return bat;
+  const vbs = join(WIN_CONFIG_DIR, 'navora-daemon.vbs');
+  // Build the command line using Chr(34) to avoid VBScript string escaping issues.
+  const parts = [command, ...args]
+    .map(a => `Chr(34) & "${a.replace(/"/g, '')}" & Chr(34)`)
+    .join(' & " " & ');
+  const content = [
+    'Dim cmd',
+    `cmd = ${parts}`,
+    'Set WshShell = CreateObject("WScript.Shell")',
+    'WshShell.Run cmd, 0, False',
+  ].join('\r\n') + '\r\n';
+  writeFileSync(vbs, content, 'utf8');
+  dbg(`vbs wrapper: ${vbs}`);
+  return vbs;
 }
 
 /**
@@ -240,15 +242,16 @@ export function installService(daemonPath?: string): void {
   dbg(`installService on ${os}, mode=${mode}, daemon=${daemonPath ?? 'npx'}`);
 
   if (os === 'win32') {
+    const wscript = join(process.env['SystemRoot'] ?? 'C:\\Windows', 'System32', 'wscript.exe');
     if (daemonPath) {
       writeWinConfig({ mode: 'local', nodePath: node, daemonPath });
-      const bat = writeBatWrapper(node, daemonPath);
-      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
+      const vbs = writeVbsWrapper(node, [daemonPath]);
+      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', `"${wscript}" /nologo "${vbs}"`, '/f']);
     } else {
       const npx = resolveNpxPath();
       writeWinConfig({ mode: 'npx', nodePath: npx });
-      const bat = writeBatWrapperNpx(npx);
-      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', bat, '/f']);
+      const vbs = writeVbsWrapper(npx, ['-y', 'navora-daemon']);
+      run('reg', ['add', WIN_RUN_KEY, '/v', WIN_RUN_VALUE, '/t', 'REG_SZ', '/d', `"${wscript}" /nologo "${vbs}"`, '/f']);
     }
     return;
   }
