@@ -11,6 +11,32 @@ _Next focus: v0.3 tool parity — hover, drag, form fill, network capture, acces
 
 ---
 
+## [0.3.1] — 2026-05-21
+
+### Changed
+
+**Installer — wizard refactor**
+- Replaced flat TUI menu with a sequential 4-step wizard (daemon → extension → Claude Code → Cursor). Steps are skipped automatically when a component is already configured.
+- State persistence at `~/.navora/state.json` — subsequent runs detect installed components and jump straight to a status screen instead of repeating the full setup.
+- `navora status`, `navora doctor`, `navora daemon [install|start|stop|uninstall]` — all commands now work as non-interactive subcommands in addition to the wizard flow.
+
+**Installer — UI overhaul**
+- NAVORA ASCII art banner with a 6-shade ANSI 256-color purple gradient (`colors.ts`).
+- Full purple palette applied to step headers, status card rows (icons, labels, details), and the spinner.
+- Custom ASCII bar spinner (`/ - \ |`, `spinner.ts`) replaces `@clack/prompts` spinner which produced flicker on Windows.
+
+**Installer — branding cleanup**
+- Native Messaging host name changed `com.ai-browser-runtime.nm` → `com.navora.nm`.
+- Daemon lockfile and log paths changed from `%TEMP%/ai-browser-runtime/` → `%TEMP%/navora/`.
+
+### Fixed
+
+- Installer: `trim()` crash when pressing Enter without entering an extension ID — now safely returns `null` instead of calling `.trim()` on `undefined`.
+- Installer: `readVersion()` path resolution corrected per tsup chunk split location (1 level up from `dist/` for the wizard chunk, 2 levels up from `dist/bin/` for the entry binary).
+- Installer: daemon service install no longer blocks when no local build is present — falls back to `npx navora-daemon` automatically.
+
+---
+
 ## [0.3.0] — 2026-05-19
 
 ### Added

@@ -4,14 +4,15 @@ Navora is a browser automation **runtime** for AI agents — not a thin proxy.
 The distinction matters: a runtime has state, identity, memory, and policy.
 A proxy has none of those. This roadmap is built around that moat.
 
-## Where we are today (v0.3)
+## Where we are today (v0.3.1)
 
 - 13 core browser tools + 3 raw CDP tools (`browser_wait_for` now accepts text content matching)
 - Daemon WebSocket hub with per-tab CDP connection pool
 - Multi-tab routing via sequential tab IDs
 - Chrome extension (Navora, v0.2.0) with Native Messaging bridge and real-time activity log sidepanel
 - SQLite persistence, permission gate, rate limiter — wired in dispatcher, not activated
-- Interactive installer TUI: guided NM host setup, daemon service management, pre-generated 30-day auth tokens
+- Installer: step-by-step wizard (4 sequential steps), state persistence at `~/.navora/state.json`, full non-interactive CLI (`navora status/doctor/daemon`)
+- Installer UI: NAVORA ASCII banner with purple gradient, custom ASCII spinner, purple ANSI 256-color palette
 - Published on npm: `navora-claude-plugin`, `navora-cursor-plugin`, `navora-daemon`
 - Retry logic in `CommandExecutor` for transient CDP disconnects (`-1`, `-2`, `-3`, `-32000`)
 - Structured `CDPError` with typed codes, `isCDPError` guard, and HTTP-style status mapping in the pipeline

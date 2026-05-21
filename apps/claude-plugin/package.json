@@ -1,6 +1,6 @@
 {
   "name": "navora-claude-plugin",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Claude Code MCP plugin for AI Browser Runtime — control Chrome from Claude",
   "type": "module",
   "bin": {
